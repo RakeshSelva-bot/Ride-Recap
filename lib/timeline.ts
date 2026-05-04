@@ -101,17 +101,6 @@ export function parseTimeline(text: string): TimelineParseResult {
   );
 }
 
-function extractTimelinePathPoints(arr: unknown): { lat: number; lng: number }[] {
-  if (!Array.isArray(arr)) return [];
-  const points: { lat: number; lng: number }[] = [];
-  for (const item of arr) {
-    if (!isObj(item)) continue;
-    const c = parsePlaceLocation(item.point) ?? parsePlaceLocation(item.location);
-    if (c) points.push(c);
-  }
-  return points;
-}
-
 function parseSegmentArray(items: unknown[]): TimelineParseResult {
   const stops: Stop[] = [];
   const activities: Activity[] = [];
@@ -121,34 +110,49 @@ function parseSegmentArray(items: unknown[]): TimelineParseResult {
     if (!isObj(raw)) continue;
     const start = parseDateField(raw.startTime);
     const end = parseDateField(raw.endTime);
-    if (!start || !end) continue;
 
-    if (isObj(raw.visit)) {
-      const top = isObj(raw.visit.topCandidate) ? raw.visit.topCandidate : {};
-      const coords = parsePlaceLocation(top.placeLocation);
-      const name =
-        asString(top.placeName) ||
-        prettifyType(asString(top.semanticType), "Stop");
-      stops.push({
-        name,
-        lat: coords?.lat ?? 0,
-        lng: coords?.lng ?? 0,
-        startTime: start,
-        endTime: end,
-      });
-    } else if (isObj(raw.activity)) {
-      const top = isObj(raw.activity.topCandidate) ? raw.activity.topCandidate : {};
-      activities.push({
-        type: prettifyType(asString(top.type), "Movement"),
-        startTime: start,
-        endTime: end,
-        distanceMeters: asNumber(raw.activity.distanceMeters),
-      });
+    if (start && end) {
+      if (isObj(raw.visit)) {
+        const top = isObj(raw.visit.topCandidate) ? raw.visit.topCandidate : {};
+        const coords = parsePlaceLocation(top.placeLocation);
+        const name =
+          asString(top.placeName) ||
+          prettifyType(asString(top.semanticType), "Stop");
+        stops.push({
+          name,
+          lat: coords?.lat ?? 0,
+          lng: coords?.lng ?? 0,
+          startTime: start,
+          endTime: end,
+        });
+      } else if (isObj(raw.activity)) {
+        const top = isObj(raw.activity.topCandidate) ? raw.activity.topCandidate : {};
+        activities.push({
+          type: prettifyType(asString(top.type), "Movement"),
+          startTime: start,
+          endTime: end,
+          distanceMeters: asNumber(raw.activity.distanceMeters),
+        });
+      }
     }
 
-    const pathPoints = extractTimelinePathPoints(raw.timelinePath);
-    if (pathPoints.length >= 2) {
-      paths.push({ startTime: start, endTime: end, points: pathPoints });
+    if (Array.isArray(raw.timelinePath) && raw.timelinePath.length >= 2) {
+      const pathPoints: { lat: number; lng: number }[] = [];
+      const pointTimes: Date[] = [];
+      for (const item of raw.timelinePath) {
+        if (!isObj(item)) continue;
+        const c = parsePlaceLocation(item.point) ?? parsePlaceLocation(item.location);
+        if (c) pathPoints.push(c);
+        const t = parseDateField(item.time);
+        if (t) pointTimes.push(t);
+      }
+      if (pathPoints.length >= 2) {
+        const pathStart = start ?? pointTimes[0] ?? null;
+        const pathEnd = end ?? pointTimes[pointTimes.length - 1] ?? null;
+        if (pathStart && pathEnd) {
+          paths.push({ startTime: pathStart, endTime: pathEnd, points: pathPoints });
+        }
+      }
     }
   }
 

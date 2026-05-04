@@ -4,7 +4,10 @@
       "Bash(npm run *)",
       "PowerShell(Get-Process *)",
       "PowerShell(Get-CimInstance *)",
-      "PowerShell(Get-NetTCPConnection *)"
+      "PowerShell(Get-NetTCPConnection *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)"
     ]
   }
 }
