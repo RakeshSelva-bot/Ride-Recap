@@ -81,8 +81,8 @@ export default function RecapMap({ stops, paths = [] }: Props) {
     >
         <FitBounds bounds={bounds} />
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
         />
 
         {hasPaths &&
@@ -98,10 +98,10 @@ export default function RecapMap({ stops, paths = [] }: Props) {
           <Polyline
             positions={stopOrderLine}
             pathOptions={{
-              color: hasPaths ? "#9CA3AF" : "#60A5FA",
-              weight: hasPaths ? 1.5 : 3,
-              opacity: hasPaths ? 0.55 : 0.75,
-              dashArray: "6 6",
+              color: hasPaths ? "#6B7280" : "#60A5FA",
+              weight: hasPaths ? 1 : 3,
+              opacity: hasPaths ? 0.35 : 0.75,
+              dashArray: "5 8",
             }}
           />
         )}
