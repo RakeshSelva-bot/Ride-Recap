@@ -69,7 +69,7 @@ export function downloadRecapCsv(recap: Recap, filename?: string): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = filename ?? `ride-recap-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.download = filename ?? `travel-recap-${new Date().toISOString().slice(0, 10)}.csv`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

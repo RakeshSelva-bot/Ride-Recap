@@ -45,10 +45,10 @@ export default function FileDropzone({ label, hint, accept, file, onFile }: Prop
   const openPicker = () => inputRef.current?.click();
 
   const borderClass = isDragging
-    ? "border-[#60A5FA] bg-[#60A5FA]/10 shadow-[0_0_0_4px_rgba(96,165,250,0.18)]"
+    ? "border-[#FF6B00] bg-[#FF6B00]/10 shadow-[0_0_0_4px_rgba(255,107,0,0.2)]"
     : file
     ? "border-[#A3E635]/60 bg-[#0F1318]"
-    : "border-[#2A2A3D] bg-[#0F0F18] hover:border-[#3A3A52]";
+    : "border-[#2A2A3D] bg-[#0F0F18] hover:border-[rgba(255,107,0,0.4)] hover:shadow-[0_0_12px_rgba(255,107,0,0.15)]";
 
   return (
     <div className="flex flex-col gap-2">

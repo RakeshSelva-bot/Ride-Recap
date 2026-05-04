@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import FileDropzone from "./FileDropzone";
+import HowToGuide from "./HowToGuide";
 import RecapView from "./RecapView";
 import { parseTimeline } from "@/lib/timeline";
 import { parseUpiFile } from "@/lib/upi-parse";
@@ -135,6 +136,8 @@ export default function UploadForm() {
           onFile={handleSetUpi}
         />
       </div>
+
+      <HowToGuide />
 
       <div className="rounded-xl border border-[#2A2A3D] bg-[#0F0F18] p-4">
         <div className="mb-3 flex items-baseline justify-between gap-2">

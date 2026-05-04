@@ -14,9 +14,9 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Ride Recap",
+  title: "Travel Recap",
   description:
-    "Upload your Google Maps Timeline and UPI transactions to generate a beautiful ride summary.",
+    "Upload your Google Maps Timeline and UPI transactions to generate a beautiful travel summary.",
 };
 
 export default function RootLayout({

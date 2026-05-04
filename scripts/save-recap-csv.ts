@@ -10,7 +10,7 @@ const recap = matchTransactionsToStops(timeline.stops, upi.transactions, timelin
 
 const csv = "﻿" + recapToCsv(recap);
 const today = new Date().toISOString().slice(0, 10);
-const out = `C:\\Users\\ADMIN\\Desktop\\ride-recap-${today}.csv`;
+const out = `C:\\Users\\ADMIN\\Desktop\\travel-recap-${today}.csv`;
 writeFileSync(out, csv, "utf8");
 console.log("Wrote:", out);
 console.log("Bytes:", csv.length);
