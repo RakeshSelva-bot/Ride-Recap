@@ -70,3 +70,4 @@ lib/            Pure logic — timeline & UPI parsers, matching,
                 share encoding, CSV export, type definitions
 scripts/        One-off Node scripts (e.g. saving a recap CSV locally)
 ```
+ 
