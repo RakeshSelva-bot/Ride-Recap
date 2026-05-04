@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import type { Recap, PathSegment, MatchedStop } from "@/lib/types";
 import { downloadRecapCsv } from "@/lib/export";
 import { buildShareUrl } from "@/lib/share";
+import { saveRecapToSupabase, buildShortShareUrl } from "@/lib/share-supabase";
 
 const RecapMap = dynamic(() => import("./RecapMap"), {
   ssr: false,
@@ -81,6 +82,8 @@ export default function RecapView({ recap, paths }: { recap: Recap; paths?: Path
 
   const [shareLabel, setShareLabel] = useState("Share");
   const [shareError, setShareError] = useState<string | null>(null);
+  const [shortLabel, setShortLabel] = useState("Save & get short link");
+  const [shortBusy, setShortBusy] = useState(false);
 
   const handleShare = async () => {
     setShareError(null);
@@ -91,6 +94,27 @@ export default function RecapView({ recap, paths }: { recap: Recap; paths?: Path
       setTimeout(() => setShareLabel("Share"), 2000);
     } catch (e) {
       setShareError(e instanceof Error ? e.message : "Could not create share link.");
+    }
+  };
+
+  const handleShortLink = async () => {
+    if (shortBusy) return;
+    setShareError(null);
+    setShortBusy(true);
+    setShortLabel("Saving…");
+    try {
+      const id = await saveRecapToSupabase(recap);
+      const url = buildShortShareUrl(id);
+      await navigator.clipboard.writeText(url);
+      setShortLabel("Copied " + url.replace(/^https?:\/\//, ""));
+      setTimeout(() => setShortLabel("Save & get short link"), 4000);
+    } catch (e) {
+      setShortLabel("Save & get short link");
+      setShareError(
+        e instanceof Error ? e.message : "Could not save recap."
+      );
+    } finally {
+      setShortBusy(false);
     }
   };
 
@@ -120,11 +144,27 @@ export default function RecapView({ recap, paths }: { recap: Recap; paths?: Path
               {totals.transactionCount === 1 ? "payment" : "payments"}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handleShortLink}
+              disabled={shortBusy}
+              title="Saves the recap and copies a short link to clipboard"
+              className="inline-flex items-center gap-1.5 rounded-md border border-[#FF6B00]/40 bg-[#FF6B00]/10 px-3 py-1.5 text-sm font-medium text-[#FF6B00] transition-all hover:border-[#FF6B00] hover:bg-[#FF6B00]/15 focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/40 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244"
+                />
+              </svg>
+              {shortLabel}
+            </button>
             <button
               type="button"
               onClick={handleShare}
-              title="Anyone with the link can see this recap"
+              title="Anyone with the link can see this recap (data embedded in URL)"
               className="inline-flex items-center gap-1.5 rounded-md border border-[#2A2A3D] bg-[#13131C] px-3 py-1.5 text-sm font-medium text-gray-200 transition-colors hover:border-[#60A5FA] hover:text-[#60A5FA] focus:outline-none focus:ring-2 focus:ring-[#60A5FA]/40"
             >
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

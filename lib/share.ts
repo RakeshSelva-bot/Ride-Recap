@@ -9,7 +9,7 @@ type WireStop = {
   e: number;
   t: WireTxn[];
 };
-type WireRecap = { v: 1; s: WireStop[]; u: WireTxn[]; d?: number };
+export type WireRecap = { v: 1; s: WireStop[]; u: WireTxn[]; d?: number };
 
 const MAX_URL_LENGTH = 16_000;
 
@@ -17,7 +17,7 @@ function toWireTxn(t: Transaction): WireTxn {
   return { m: t.merchant, a: t.amount, t: t.datetime.getTime() };
 }
 
-function toWire(recap: Recap): WireRecap {
+export function toWire(recap: Recap): WireRecap {
   return {
     v: 1,
     s: recap.stops.map((m) => ({
@@ -33,7 +33,7 @@ function toWire(recap: Recap): WireRecap {
   };
 }
 
-function fromWire(w: WireRecap): Recap {
+export function fromWire(w: WireRecap): Recap {
   const stops: MatchedStop[] = w.s.map((s) => {
     const transactions: Transaction[] = s.t.map((t) => ({
       merchant: t.m,
