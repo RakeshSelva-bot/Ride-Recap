@@ -1,0 +1,72 @@
+[
+  {
+    "startTime": "2026-04-15T03:00:00.000Z",
+    "endTime": "2026-04-15T03:45:00.000Z",
+    "visit": {
+      "topCandidate": {
+        "semanticType": "TYPE_HOME",
+        "placeLocation": "geo:12.9716,77.5946"
+      }
+    }
+  },
+  {
+    "startTime": "2026-04-15T03:45:00.000Z",
+    "endTime": "2026-04-15T04:10:00.000Z",
+    "activity": {
+      "topCandidate": { "type": "TYPE_IN_PASSENGER_VEHICLE" },
+      "distanceMeters": "5200"
+    }
+  },
+  {
+    "startTime": "2026-04-15T04:10:00.000Z",
+    "endTime": "2026-04-15T05:00:00.000Z",
+    "visit": {
+      "topCandidate": {
+        "placeName": "MTR (Mavalli Tiffin Room)",
+        "semanticType": "TYPE_RESTAURANT",
+        "placeLocation": "geo:12.9479,77.5749"
+      }
+    }
+  },
+  {
+    "startTime": "2026-04-15T05:00:00.000Z",
+    "endTime": "2026-04-15T05:30:00.000Z",
+    "activity": {
+      "topCandidate": { "type": "TYPE_WALKING" },
+      "distanceMeters": "800"
+    }
+  },
+  {
+    "startTime": "2026-04-15T05:30:00.000Z",
+    "endTime": "2026-04-15T08:00:00.000Z",
+    "visit": {
+      "topCandidate": {
+        "placeName": "Forum Mall",
+        "semanticType": "TYPE_SHOPPING_MALL",
+        "placeLocation": "geo:12.9347,77.6101"
+      }
+    }
+  },
+  {
+    "startTime": "2026-04-15T08:00:00.000Z",
+    "endTime": "2026-04-15T09:00:00.000Z",
+    "visit": {
+      "topCandidate": {
+        "placeName": "Truffles Koramangala",
+        "semanticType": "TYPE_RESTAURANT",
+        "placeLocation": "geo:12.9352,77.6245"
+      }
+    }
+  },
+  {
+    "startTime": "2026-04-15T12:30:00.000Z",
+    "endTime": "2026-04-15T15:00:00.000Z",
+    "visit": {
+      "topCandidate": {
+        "placeName": "Toit Brewpub",
+        "semanticType": "TYPE_BAR",
+        "placeLocation": "geo:12.9789,77.6406"
+      }
+    }
+  }
+]
