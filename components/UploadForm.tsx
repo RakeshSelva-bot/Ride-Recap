@@ -50,7 +50,7 @@ export default function UploadForm() {
       .catch(() => setError("Could not load shared recap — the link may be malformed."));
   }, []);
 
-  const ready = timelineFile !== null && upiFile !== null;
+  const ready = timelineFile !== null || upiFile !== null;
 
   const reset = () => {
     setError(null);
@@ -78,9 +78,12 @@ export default function UploadForm() {
     setLoading(true);
     reset();
     try {
-      const timelineText = await timelineFile!.text();
-      const timeline = parseTimeline(timelineText);
-      const upi = await parseUpiFile(upiFile!);
+      const timeline = timelineFile
+        ? parseTimeline(await timelineFile.text())
+        : { stops: [], activities: [], paths: [] };
+      const upi = upiFile
+        ? await parseUpiFile(upiFile)
+        : { transactions: [], warnings: [] };
 
       const fullRange = getDataDateRange(timeline.stops, upi.transactions);
       setDataRange({
@@ -123,14 +126,14 @@ export default function UploadForm() {
       <div className="grid gap-6 md:grid-cols-2">
         <FileDropzone
           label="Google Maps Timeline JSON"
-          hint="JSON file from Google Takeout"
+          hint="JSON from Google Takeout — optional"
           accept="application/json,.json"
           file={timelineFile}
           onFile={handleSetTimeline}
         />
         <FileDropzone
           label="UPI Transactions (CSV or PDF)"
-          hint="CSV from your bank, or PDF from PhonePe / GPay"
+          hint="CSV or PDF from PhonePe / GPay — optional"
           accept=".csv,.pdf,text/csv,application/pdf"
           file={upiFile}
           onFile={handleSetUpi}

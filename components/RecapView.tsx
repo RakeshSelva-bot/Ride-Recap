@@ -75,8 +75,10 @@ function groupByDay(stops: MatchedStop[]): { day: Date; items: MatchedStop[] }[]
 
 export default function RecapView({ recap, paths }: { recap: Recap; paths?: PathSegment[] }) {
   const { stops, unmatchedTransactions, totals } = recap;
+  const hasTransactions = totals.transactionCount > 0;
+  // No transactions uploaded → show all stops (route/map view). Otherwise only stops with spend.
   const visibleStops = [...stops]
-    .filter((s) => s.transactions.length > 0)
+    .filter((s) => !hasTransactions || s.transactions.length > 0)
     .sort((a, b) => a.stop.startTime.getTime() - b.stop.startTime.getTime());
   const groupedDays = groupByDay(visibleStops);
 
@@ -208,9 +210,9 @@ export default function RecapView({ recap, paths }: { recap: Recap; paths?: Path
           />
           <HeroStat
             eyebrow="Spent"
-            value={fmtCurrency(totals.totalSpent)}
+            value={hasTransactions ? fmtCurrency(totals.totalSpent) : "—"}
             color="#A3E635"
-            footnote={`Matched ${totals.matchedCount} of ${totals.transactionCount}`}
+            footnote={hasTransactions ? `Matched ${totals.matchedCount} of ${totals.transactionCount}` : "Upload UPI file to track spend"}
           />
           <HeroStat
             eyebrow="Stops"
@@ -247,8 +249,10 @@ export default function RecapView({ recap, paths }: { recap: Recap; paths?: Path
                     />
                     <h4 className="text-sm font-semibold text-white">{fmtDay(bucket.day)}</h4>
                     <span className="text-xs text-gray-500">
-                      {bucket.items.length} {bucket.items.length === 1 ? "stop" : "stops"} ·{" "}
-                      <span className="tabular-nums text-gray-300">{fmtCurrency(dayTotal)}</span>
+                      {bucket.items.length} {bucket.items.length === 1 ? "stop" : "stops"}
+                      {hasTransactions && (
+                        <> · <span className="tabular-nums text-gray-300">{fmtCurrency(dayTotal)}</span></>
+                      )}
                     </span>
                   </div>
                   <ol
@@ -273,12 +277,14 @@ export default function RecapView({ recap, paths }: { recap: Recap; paths?: Path
                                 {fmtDuration(m.stop.endTime.getTime() - m.stop.startTime.getTime())}
                               </p>
                             </div>
-                            <span
-                              className="shrink-0 text-base font-semibold tabular-nums"
-                              style={{ color: dayColor }}
-                            >
-                              {fmtCurrency(m.totalAmount)}
-                            </span>
+                            {hasTransactions && (
+                              <span
+                                className="shrink-0 text-base font-semibold tabular-nums"
+                                style={{ color: dayColor }}
+                              >
+                                {fmtCurrency(m.totalAmount)}
+                              </span>
+                            )}
                           </div>
                           <ul className="mt-3 space-y-1 text-sm text-gray-300">
                             {m.transactions.map((t, j) => (
@@ -299,11 +305,11 @@ export default function RecapView({ recap, paths }: { recap: Recap; paths?: Path
             })}
           </div>
         </section>
-      ) : (
+      ) : hasTransactions ? (
         <section className="rounded-xl border border-[#2A2A3D] bg-[#13131C] p-4 text-sm text-gray-400">
-          No payments could be matched to a stop. Check that the timeline and CSV cover the same date range.
+          No payments could be matched to a stop. Check that the timeline and transaction file cover the same date range.
         </section>
-      )}
+      ) : null}
 
       {unmatchedTransactions.length > 0 && (
         <section>
