@@ -105,7 +105,7 @@ export default function RecapView({ recap, paths }: { recap: Recap; paths?: Path
     setShortBusy(true);
     setShortLabel("Saving…");
     try {
-      const id = await saveRecapToSupabase(recap);
+      const id = await saveRecapToSupabase(recap, paths ?? []);
       const url = buildShortShareUrl(id);
       await navigator.clipboard.writeText(url);
       setShortLabel("Copied " + url.replace(/^https?:\/\//, ""));
@@ -356,18 +356,4 @@ function HeroStat({
     <div className="px-6 py-7">
       <p
         className="text-[11px] font-medium uppercase tracking-[0.24em]"
-        style={{ color }}
-      >
-        {eyebrow}
-      </p>
-      <p
-        className="mt-2 flex items-baseline gap-1 text-3xl font-semibold tracking-tight tabular-nums sm:text-4xl"
-        style={{ color, textShadow: `0 0 24px ${color}55` }}
-      >
-        <span>{value}</span>
-        {unit && <span className="text-base font-medium text-gray-400">{unit}</span>}
-      </p>
-      {footnote && <p className="mt-1.5 text-xs text-gray-500">{footnote}</p>}
-    </div>
-  );
-}
+        
