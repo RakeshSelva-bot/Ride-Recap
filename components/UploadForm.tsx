@@ -8,6 +8,7 @@ import { parseTimeline } from "@/lib/timeline";
 import { parseUpiFile } from "@/lib/upi-parse";
 import { matchTransactionsToStops, filterByDateRange, getDataDateRange } from "@/lib/match";
 import { decodeRecap, readRecapHash, clearRecapHash } from "@/lib/share";
+import { enrichStopNames } from "@/lib/geocode";
 import type { Recap, PathSegment } from "@/lib/types";
 
 function toDateInputValue(d: Date | null): string {
@@ -110,7 +111,8 @@ export default function UploadForm() {
         }
       }
 
-      const result = matchTransactionsToStops(filteredStops, filteredTxns, filteredActivities);
+      const enrichedStops = await enrichStopNames(filteredStops);
+      const result = matchTransactionsToStops(enrichedStops, filteredTxns, filteredActivities);
       setRecap(result);
       setPaths(filteredPaths);
       setWarnings(extraWarnings);
@@ -194,7 +196,7 @@ export default function UploadForm() {
         disabled={!ready || loading}
         className="group relative w-full overflow-hidden rounded-xl bg-gradient-to-r from-[#60A5FA] via-[#A78BFA] to-[#F472B6] px-6 py-3.5 text-base font-semibold text-white shadow-[0_0_30px_-8px_rgba(167,139,250,0.6)] transition-all hover:shadow-[0_0_40px_-6px_rgba(244,114,182,0.7)] focus:outline-none focus:ring-2 focus:ring-[#A78BFA]/50 disabled:cursor-not-allowed disabled:from-[#1F1F2E] disabled:via-[#1F1F2E] disabled:to-[#1F1F2E] disabled:text-gray-500 disabled:shadow-none"
       >
-        {loading ? "Generating…" : "Generate My Recap"}
+        {loading ? "Looking up locations…" : "Generate My Recap"}
       </button>
 
       {error && (
