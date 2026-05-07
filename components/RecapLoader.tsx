@@ -40,4 +40,11 @@ export default function RecapLoader({ id }: { id: string }) {
   if (!recap) {
     return (
       <div className="flex items-center gap-3 rounded-xl border border-[#2A2A3D] bg-[#0F0F18] px-4 py-3 text-sm text-gray-400">
-        <span className="inline-block h-2 w-
+        <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-[#FF6B00]" />
+        Loading recap...
+      </div>
+    );
+  }
+
+  return <RecapView recap={recap} paths={paths} />;
+}

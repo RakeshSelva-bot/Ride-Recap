@@ -76,7 +76,7 @@ function groupByDay(stops: MatchedStop[]): { day: Date; items: MatchedStop[] }[]
 export default function RecapView({ recap, paths }: { recap: Recap; paths?: PathSegment[] }) {
   const { stops, unmatchedTransactions, totals } = recap;
   const hasTransactions = totals.transactionCount > 0;
-  // No transactions uploaded → show all stops (route/map view). Otherwise only stops with spend.
+  // No transactions uploaded - show all stops (route/map view). Otherwise only stops with spend.
   const visibleStops = [...stops]
     .filter((s) => !hasTransactions || s.transactions.length > 0)
     .sort((a, b) => a.stop.startTime.getTime() - b.stop.startTime.getTime());
@@ -103,7 +103,7 @@ export default function RecapView({ recap, paths }: { recap: Recap; paths?: Path
     if (shortBusy) return;
     setShareError(null);
     setShortBusy(true);
-    setShortLabel("Saving…");
+    setShortLabel("Saving...");
     try {
       const id = await saveRecapToSupabase(recap, paths ?? []);
       const url = buildShortShareUrl(id);
@@ -316,7 +316,7 @@ export default function RecapView({ recap, paths }: { recap: Recap; paths?: Path
           <h3 className="mb-2 text-[11px] font-medium uppercase tracking-[0.24em] text-gray-500">
             Unmatched payments
           </h3>
-          <p className="mb-3 text-xs text-gray-500">No stop within ±30 minutes.</p>
+          <p className="mb-3 text-xs text-gray-500">No stop within +-30 minutes.</p>
           <ul className="flex flex-col gap-1 text-sm">
             {unmatchedTransactions.map((t, i) => (
               <li
@@ -356,4 +356,18 @@ function HeroStat({
     <div className="px-6 py-7">
       <p
         className="text-[11px] font-medium uppercase tracking-[0.24em]"
-        
+        style={{ color }}
+      >
+        {eyebrow}
+      </p>
+      <p
+        className="mt-2 flex items-baseline gap-1 text-3xl font-semibold tracking-tight tabular-nums sm:text-4xl"
+        style={{ color, textShadow: `0 0 24px ${color}55` }}
+      >
+        <span>{value}</span>
+        {unit && <span className="text-base font-medium text-gray-400">{unit}</span>}
+      </p>
+      {footnote && <p className="mt-1.5 text-xs text-gray-500">{footnote}</p>}
+    </div>
+  );
+}
