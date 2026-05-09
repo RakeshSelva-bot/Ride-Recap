@@ -11,6 +11,7 @@ export interface PosterOptions {
   contrast: number;
   overlayOpacity: number;
   routeColor: string;
+  customTitle: string;
 }
 
 export const DEFAULT_OPTIONS: PosterOptions = {
@@ -22,6 +23,7 @@ export const DEFAULT_OPTIONS: PosterOptions = {
   contrast: 1,
   overlayOpacity: 0.62,
   routeColor: "#60A5FA",
+  customTitle: "",
 };
 
 interface Pt { x: number; y: number }
@@ -99,12 +101,11 @@ export function drawPoster(
     ctx.filter = `brightness(${brightness}) contrast(${contrast})`;
     ctx.drawImage(photo, drawX, drawY, baseW, baseH);
     ctx.filter = "none";
-    const oa = isPrint ? Math.max(overlayOpacity, 0.75) : overlayOpacity;
     ctx.fillStyle = isPrint
-      ? `rgba(255,255,255,${oa})`
+      ? `rgba(255,255,255,${overlayOpacity})`
       : isDark
-      ? `rgba(4,6,18,${oa})`
-      : `rgba(248,248,244,${oa})`;
+      ? `rgba(4,6,18,${overlayOpacity})`
+      : `rgba(248,248,244,${overlayOpacity})`;
     ctx.fillRect(0, 0, W, H);
   }
 
@@ -197,13 +198,15 @@ export function drawPoster(
     ctx.fillText(name, lx + lpad, ly);
   });
 
-  // Stats panel
+  // Stats panel — fully opaque so it's always readable
   if (!isPrint) {
-    ctx.fillStyle = isDark ? "rgba(4,6,18,0.92)" : "rgba(240,240,236,0.94)";
+    ctx.fillStyle = isDark ? "#040612" : "#F0F0EC";
     ctx.fillRect(0, BOTTOM_PANEL, W, H - BOTTOM_PANEL);
   } else {
+    ctx.fillStyle = "#FFFFFF";
+    ctx.fillRect(0, BOTTOM_PANEL, W, H - BOTTOM_PANEL);
     ctx.strokeStyle = "#CBD5E1";
-    ctx.lineWidth = 1;
+    ctx.lineWidth = 1 * scale;
     ctx.beginPath();
     ctx.moveTo(PAD, BOTTOM_PANEL);
     ctx.lineTo(W - PAD, BOTTOM_PANEL);
@@ -211,18 +214,19 @@ export function drawPoster(
   }
 
   const textPrimary = isPrint ? "#0F172A" : isDark ? "#FFFFFF" : "#0F172A";
-  const textMuted = isPrint ? "#64748B" : isDark ? "rgba(255,255,255,0.45)" : "#64748B";
+  const textMuted = isPrint ? "#64748B" : isDark ? "rgba(255,255,255,0.5)" : "#64748B";
 
   const startCity = stops[0]?.stop.name.split(",")[0] ?? "";
   const endCity = stops[stops.length - 1]?.stop.name.split(",")[0] ?? "";
-  const title =
+  const autoTitle =
     startCity && endCity && startCity !== endCity
       ? `${startCity} — ${endCity}`
       : "My Ride";
+  const title = options.customTitle.trim() || autoTitle;
 
-  ctx.font = `500 ${18 * scale}px system-ui,sans-serif`;
+  ctx.font = `600 ${16 * scale}px system-ui,sans-serif`;
   ctx.fillStyle = textPrimary;
-  ctx.fillText(title, PAD, BOTTOM_PANEL + 34 * scale, W - PAD * 2);
+  ctx.fillText(title, PAD, BOTTOM_PANEL + 30 * scale, W - PAD * 2);
 
   if (stops.length > 0) {
     const d0 = stops[0].stop.startTime;
@@ -231,9 +235,9 @@ export function drawPoster(
       d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
     const dateStr =
       d0.toDateString() === d1.toDateString() ? fmt(d0) : `${fmt(d0)} — ${fmt(d1)}`;
-    ctx.font = `400 ${9 * scale}px system-ui,sans-serif`;
+    ctx.font = `400 ${8.5 * scale}px system-ui,sans-serif`;
     ctx.fillStyle = textMuted;
-    ctx.fillText(dateStr.toUpperCase(), PAD, BOTTOM_PANEL + 50 * scale);
+    ctx.fillText(dateStr.toUpperCase(), PAD, BOTTOM_PANEL + 46 * scale);
   }
 
   const kms = Math.round(recap.totals.distanceMeters / 1000);
@@ -246,19 +250,23 @@ export function drawPoster(
     { val: String(days), unit: days === 1 ? "DAY" : "DAYS", color: "#A3E635" },
   ];
 
+  // Stats — three equal columns, numbers + label stacked, clamped to column width
   const slotW = (W - PAD * 2) / 3;
+  const statY = BOTTOM_PANEL + 62 * scale;
   statItems.forEach((s, i) => {
     const sx = PAD + i * slotW;
-    const sy = BOTTOM_PANEL + 68 * scale;
-    ctx.font = `500 ${26 * scale}px system-ui,sans-serif`;
-    ctx.fillStyle = s.color;
-    ctx.fillText(s.val, sx, sy + 26 * scale);
-    ctx.font = `400 ${8 * scale}px system-ui,sans-serif`;
+    const maxW = slotW - 6 * scale;
+    // Value
+    ctx.font = `700 ${20 * scale}px system-ui,sans-serif`;
+    ctx.fillStyle = isPrint ? "#0F172A" : s.color;
+    ctx.fillText(s.val, sx, statY + 20 * scale, maxW);
+    // Label — sits 6px below baseline of value
+    ctx.font = `500 ${9 * scale}px system-ui,sans-serif`;
     ctx.fillStyle = textMuted;
-    ctx.fillText(s.unit, sx, sy + 40 * scale);
+    ctx.fillText(s.unit, sx, statY + 32 * scale, maxW);
   });
 
-  ctx.font = `400 ${7.5 * scale}px system-ui,sans-serif`;
+  ctx.font = `400 ${7 * scale}px system-ui,sans-serif`;
   ctx.fillStyle = textMuted;
-  ctx.fillText("travel-recap-one.vercel.app", PAD, H - 14 * scale);
+  ctx.fillText("travel-recap-one.vercel.app", PAD, H - 12 * scale);
 }

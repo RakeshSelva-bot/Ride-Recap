@@ -284,6 +284,27 @@ export default function PosterCreator({
             </div>
           )}
 
+          {/* Editable title */}
+          <div>
+            <p className="mb-1.5 text-[11px] font-medium uppercase tracking-[0.18em] text-gray-400">Poster title</p>
+            <input
+              type="text"
+              placeholder="Auto — from your start and end city"
+              value={options.customTitle}
+              onChange={(e) => set("customTitle", e.target.value)}
+              maxLength={40}
+              className="w-full rounded-lg border border-[#2A2A3D] bg-[#13131C] px-3 py-2 text-sm text-gray-100 placeholder:text-gray-600 focus:border-[#FF6B00] focus:outline-none focus:ring-1 focus:ring-[#FF6B00]"
+            />
+            {options.customTitle && (
+              <button
+                onClick={() => set("customTitle", "")}
+                className="mt-1 text-[10px] text-gray-500 hover:text-gray-300 transition-colors"
+              >
+                Reset to auto
+              </button>
+            )}
+          </div>
+
           {/* Map / route color */}
           <div className="flex items-center gap-3">
             <div className="flex-1">
