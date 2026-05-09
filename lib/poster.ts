@@ -151,7 +151,7 @@ export function drawPoster(
       ctx.quadraticCurveTo(projRoute[i].x, projRoute[i].y, mx, my);
     }
     ctx.lineTo(projRoute[projRoute.length - 1].x, projRoute[projRoute.length - 1].y);
-    ctx.strokeStyle = isPrint ? "#1E293B" : routeColor;
+    ctx.strokeStyle = routeColor;
     ctx.lineWidth = 2.5 * scale;
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
