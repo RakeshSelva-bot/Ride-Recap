@@ -109,7 +109,8 @@ export function drawPoster(
     style, panX, panY, zoom, brightness, contrast, overlayOpacity,
     routeColor, labelColor, labelBg,
     mapZoom, mapPanX, mapPanY,
-    panelOpacity, titleColor, titleFont, statsColor, unitColor,
+    panelOpacity, titleColor, titleFont, statsColor, unitColor, dateColor,
+    customTitle, customDate,
   } = options;
   const isDark = style === "dark";
   const isPrint = style === "print";
@@ -299,9 +300,9 @@ export function drawPoster(
   const startCity = stops[0]?.stop.name.split(",")[0] ?? "";
   const endCity = stops[stops.length - 1]?.stop.name.split(",")[0] ?? "";
   const autoTitle = startCity && endCity && startCity !== endCity ? `${startCity} — ${endCity}` : "My Ride";
-  const title = options.customTitle.trim() || autoTitle;
+  const title = customTitle.trim() || autoTitle;
 
-  let dateStr = options.customDate.trim();
+  let dateStr = customDate.trim();
   if (!dateStr && stops.length > 0) {
     const d0 = stops[0].stop.startTime;
     const d1 = stops[stops.length - 1].stop.endTime;
@@ -317,7 +318,7 @@ export function drawPoster(
 
   if (dateStr) {
     ctx.font = `400 ${8 * scale}px ${titleFont}`;
-    ctx.fillStyle = options.dateColor || textMuted;
+    ctx.fillStyle = dateColor || textMuted;
     ctx.fillText(dateStr.toUpperCase(), W / 2, 36 * scale);
   }
 
@@ -338,7 +339,7 @@ export function drawPoster(
   const footerTop = H - FOOTER_H;
   const valY = footerTop + 28 * scale;
   const unitY = footerTop + 42 * scale;
-  const resolvedUnitColor = options.unitColor || textMuted;
+  const resolvedUnitColor = unitColor || textMuted;
 
   statItems.forEach((s, i) => {
     const sx = PAD_X + i * slotW;
