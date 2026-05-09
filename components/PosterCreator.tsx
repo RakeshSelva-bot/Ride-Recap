@@ -208,6 +208,12 @@ export default function PosterCreator({ recap, paths, onClose }: {
           {/* Map */}
           <div className="px-4 py-3 flex flex-col gap-2">
             <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-gray-500">Map</p>
+            <Slider label="Map zoom" min={0.5} max={4} step={0.05} value={options.mapZoom} display={`${options.mapZoom.toFixed(2)}x`} onChange={v => set("mapZoom", v)} />
+            <Slider label="Pan X" min={-0.5} max={0.5} step={0.01} value={options.mapPanX} display={`${options.mapPanX > 0 ? "+" : ""}${options.mapPanX.toFixed(2)}`} onChange={v => set("mapPanX", v)} />
+            <Slider label="Pan Y" min={-0.5} max={0.5} step={0.01} value={options.mapPanY} display={`${options.mapPanY > 0 ? "+" : ""}${options.mapPanY.toFixed(2)}`} onChange={v => set("mapPanY", v)} />
+            {(options.mapZoom !== 1 || options.mapPanX !== 0 || options.mapPanY !== 0) && (
+              <button onClick={() => setOptions(o => ({ ...o, mapZoom: 1, mapPanX: 0, mapPanY: 0 }))} className="self-start text-[10px] text-gray-500 hover:text-gray-300 transition-colors">Reset map</button>
+            )}
             <Row label="Route color"><ColorDot value={options.routeColor} onChange={v => set("routeColor", v)} /></Row>
             <Row label="Town names"><ColorDot value={options.labelColor} onChange={v => set("labelColor", v)} /></Row>
             <Row label="Label bg"><Toggle on={options.labelBg} onToggle={() => set("labelBg", !options.labelBg)} /></Row>
