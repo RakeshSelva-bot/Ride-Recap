@@ -12,6 +12,13 @@ export interface PosterOptions {
   overlayOpacity: number;
   routeColor: string;
   customTitle: string;
+  customDate: string;
+  panelOpacity: number;    // 0 = fully transparent, 1 = fully solid
+  labelColor: string;      // town name text colour on map
+  labelBg: boolean;        // show/hide label pill background
+  titleColor: string;      // bottom title text colour
+  titleFont: string;       // CSS font-family string
+  statsColor: string;      // "" = keep per-stat colours; hex = override all
 }
 
 export const DEFAULT_OPTIONS: PosterOptions = {
@@ -24,6 +31,13 @@ export const DEFAULT_OPTIONS: PosterOptions = {
   overlayOpacity: 0.62,
   routeColor: "#60A5FA",
   customTitle: "",
+  customDate: "",
+  panelOpacity: 0,
+  labelColor: "#FFFFFF",
+  labelBg: false,
+  titleColor: "#FFFFFF",
+  titleFont: "system-ui,sans-serif",
+  statsColor: "",
 };
 
 interface Pt { x: number; y: number }
@@ -79,7 +93,10 @@ export function drawPoster(
   const ctx = canvas.getContext("2d")!;
   ctx.clearRect(0, 0, W, H);
 
-  const { style, panX, panY, zoom, brightness, contrast, overlayOpacity, routeColor } = options;
+  const {
+    style, panX, panY, zoom, brightness, contrast, overlayOpacity,
+    routeColor, panelOpacity, labelColor, labelBg, titleColor, titleFont, statsColor,
+  } = options;
   const isDark = style === "dark";
   const isPrint = style === "print";
 
@@ -141,7 +158,7 @@ export function drawPoster(
     ctx.stroke();
   }
 
-  // Stop dots + clamped labels
+  // Stop dots + labels
   const usedRects: { x: number; y: number; w: number; h: number }[] = [];
   const stops = recap.stops;
   ctx.textBaseline = "alphabetic";
@@ -151,7 +168,6 @@ export function drawPoster(
     const isLast = i === stops.length - 1;
     const r = (isFirst || isLast ? 5.5 : 3.5) * scale;
 
-    // Clamp dot within map bounds
     const cx = Math.max(PAD + r, Math.min(W - PAD - r, pt.x));
     const cy = Math.max(mapY + r, Math.min(BOTTOM_PANEL - r - 4 * scale, pt.y));
 
@@ -168,23 +184,18 @@ export function drawPoster(
     if (!name || ["unknown", "stop", "unknown place"].includes(name.toLowerCase())) return;
 
     const fsize = (isFirst || isLast ? 9.5 : 8) * scale;
-    ctx.font = `${isFirst || isLast ? 500 : 400} ${fsize}px system-ui,sans-serif`;
+    ctx.font = `${isFirst || isLast ? 600 : 400} ${fsize}px system-ui,sans-serif`;
     const tw = ctx.measureText(name).width;
-    const lpad = 4 * scale;
+    const lpad = labelBg ? 4 * scale : 2 * scale;
     const lw = tw + lpad * 2;
     const lh = fsize + lpad * 1.5;
 
-    // Try right side
     let lx = cx + r + 5 * scale;
     let ly = cy + fsize * 0.4;
 
-    // Flip left if would overflow right edge
     if (lx + lw > W - 4 * scale) lx = cx - r - 5 * scale - lw;
-    // Clamp left edge
     if (lx < 4 * scale) lx = 4 * scale;
-    // Clamp bottom — push label above dot if near panel
     if (ly + lh > BOTTOM_PANEL - 2 * scale) ly = cy - lh * 0.5;
-    // Clamp top
     if (ly - fsize < mapY) ly = mapY + fsize;
 
     const rect = { x: lx, y: ly - fsize, w: lw, h: lh };
@@ -192,19 +203,36 @@ export function drawPoster(
     if (overlaps && !isFirst && !isLast) return;
     usedRects.push(rect);
 
-    ctx.fillStyle = isPrint ? "rgba(255,255,255,0.93)" : "rgba(0,0,0,0.72)";
-    ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
-    ctx.fillStyle = isPrint ? "#1E293B" : "#FFFFFF";
+    // Background pill — optional
+    if (labelBg) {
+      ctx.fillStyle = isPrint ? "rgba(255,255,255,0.93)" : "rgba(0,0,0,0.65)";
+      ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+    }
+
+    // Text shadow for readability without bg
+    if (!labelBg) {
+      ctx.shadowColor = isPrint ? "rgba(255,255,255,0.8)" : "rgba(0,0,0,0.9)";
+      ctx.shadowBlur = 4 * scale;
+    }
+    ctx.fillStyle = labelColor;
     ctx.fillText(name, lx + lpad, ly);
+    ctx.shadowBlur = 0;
+    ctx.shadowColor = "transparent";
   });
 
-  // Stats panel — fully opaque so it's always readable
-  if (!isPrint) {
-    ctx.fillStyle = isDark ? "#040612" : "#F0F0EC";
+  // Stats panel background (transparent by default)
+  const panelBg = isPrint
+    ? `rgba(255,255,255,${panelOpacity})`
+    : isDark
+    ? `rgba(4,6,18,${panelOpacity})`
+    : `rgba(240,240,236,${panelOpacity})`;
+  if (panelOpacity > 0) {
+    ctx.fillStyle = panelBg;
     ctx.fillRect(0, BOTTOM_PANEL, W, H - BOTTOM_PANEL);
-  } else {
-    ctx.fillStyle = "#FFFFFF";
-    ctx.fillRect(0, BOTTOM_PANEL, W, H - BOTTOM_PANEL);
+  }
+
+  // Divider line for print style
+  if (isPrint) {
     ctx.strokeStyle = "#CBD5E1";
     ctx.lineWidth = 1 * scale;
     ctx.beginPath();
@@ -213,9 +241,9 @@ export function drawPoster(
     ctx.stroke();
   }
 
-  const textPrimary = isPrint ? "#0F172A" : isDark ? "#FFFFFF" : "#0F172A";
   const textMuted = isPrint ? "#64748B" : isDark ? "rgba(255,255,255,0.5)" : "#64748B";
 
+  // Title
   const startCity = stops[0]?.stop.name.split(",")[0] ?? "";
   const endCity = stops[stops.length - 1]?.stop.name.split(",")[0] ?? "";
   const autoTitle =
@@ -224,22 +252,26 @@ export function drawPoster(
       : "My Ride";
   const title = options.customTitle.trim() || autoTitle;
 
-  ctx.font = `600 ${16 * scale}px system-ui,sans-serif`;
-  ctx.fillStyle = textPrimary;
+  ctx.font = `600 ${16 * scale}px ${titleFont}`;
+  ctx.fillStyle = titleColor;
   ctx.fillText(title, PAD, BOTTOM_PANEL + 30 * scale, W - PAD * 2);
 
+  // Date
   if (stops.length > 0) {
-    const d0 = stops[0].stop.startTime;
-    const d1 = stops[stops.length - 1].stop.endTime;
-    const fmt = (d: Date) =>
-      d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
-    const dateStr =
-      d0.toDateString() === d1.toDateString() ? fmt(d0) : `${fmt(d0)} — ${fmt(d1)}`;
-    ctx.font = `400 ${8.5 * scale}px system-ui,sans-serif`;
+    let dateStr = options.customDate.trim();
+    if (!dateStr) {
+      const d0 = stops[0].stop.startTime;
+      const d1 = stops[stops.length - 1].stop.endTime;
+      const fmt = (d: Date) =>
+        d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+      dateStr = d0.toDateString() === d1.toDateString() ? fmt(d0) : `${fmt(d0)} — ${fmt(d1)}`;
+    }
+    ctx.font = `400 ${8.5 * scale}px ${titleFont}`;
     ctx.fillStyle = textMuted;
     ctx.fillText(dateStr.toUpperCase(), PAD, BOTTOM_PANEL + 46 * scale);
   }
 
+  // Stats
   const kms = Math.round(recap.totals.distanceMeters / 1000);
   const ms0 = stops[0]?.stop.startTime.getTime() ?? 0;
   const ms1 = stops[stops.length - 1]?.stop.endTime.getTime() ?? 0;
@@ -250,17 +282,15 @@ export function drawPoster(
     { val: String(days), unit: days === 1 ? "DAY" : "DAYS", color: "#A3E635" },
   ];
 
-  // Stats — three equal columns, numbers + label stacked, clamped to column width
   const slotW = (W - PAD * 2) / 3;
   const statY = BOTTOM_PANEL + 62 * scale;
   statItems.forEach((s, i) => {
     const sx = PAD + i * slotW;
     const maxW = slotW - 6 * scale;
-    // Value
-    ctx.font = `700 ${20 * scale}px system-ui,sans-serif`;
-    ctx.fillStyle = isPrint ? "#0F172A" : s.color;
+    const valColor = statsColor || (isPrint ? "#0F172A" : s.color);
+    ctx.font = `700 ${20 * scale}px ${titleFont}`;
+    ctx.fillStyle = valColor;
     ctx.fillText(s.val, sx, statY + 20 * scale, maxW);
-    // Label — sits 6px below baseline of value
     ctx.font = `500 ${9 * scale}px system-ui,sans-serif`;
     ctx.fillStyle = textMuted;
     ctx.fillText(s.unit, sx, statY + 32 * scale, maxW);
