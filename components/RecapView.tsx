@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import dynamic from "next/dynamic";
 import type { Recap, PathSegment, MatchedStop } from "@/lib/types";
 import { downloadRecapCsv } from "@/lib/export";
@@ -88,6 +88,13 @@ export default function RecapView({ recap, paths }: { recap: Recap; paths?: Path
   const [shortLabel, setShortLabel] = useState("Save & get short link");
   const [shortBusy, setShortBusy] = useState(false);
   const [showPoster, setShowPoster] = useState(false);
+  const posterRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (showPoster && posterRef.current) {
+      setTimeout(() => posterRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+    }
+  }, [showPoster]);
 
   const handleShare = async () => {
     setShareError(null);
@@ -352,11 +359,13 @@ export default function RecapView({ recap, paths }: { recap: Recap; paths?: Path
         </section>
       )}
       {showPoster && (
-        <PosterCreator
-          recap={recap}
-          paths={paths}
-          onClose={() => setShowPoster(false)}
-        />
+        <div ref={posterRef}>
+          <PosterCreator
+            recap={recap}
+            paths={paths}
+            onClose={() => setShowPoster(false)}
+          />
+        </div>
       )}
     </div>
   );

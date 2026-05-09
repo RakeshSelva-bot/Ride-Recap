@@ -146,9 +146,9 @@ export default function PosterCreator({ recap, paths, onClose }: {
         <button onClick={onClose} className="text-gray-500 hover:text-gray-200 transition-colors text-lg leading-none px-1">&times;</button>
       </div>
 
-      <div className="flex flex-col sm:flex-row">
-        {/* Sticky canvas column */}
-        <div className="sm:sticky sm:top-4 sm:self-start flex flex-col items-center gap-1.5 p-4 shrink-0">
+      <div className="flex flex-col sm:flex-row sm:items-start">
+        {/* Canvas column — never scrolls */}
+        <div className="flex flex-col items-center gap-1.5 p-4 shrink-0 sm:border-r sm:border-[#1E1E2E]">
           <canvas
             ref={canvasRef}
             width={PREVIEW_W} height={PREVIEW_H}
@@ -159,8 +159,8 @@ export default function PosterCreator({ recap, paths, onClose }: {
           <p className="text-[10px] text-gray-600">{photo ? "Drag to reposition" : "Preview"}</p>
         </div>
 
-        {/* Controls column */}
-        <div className="flex flex-col gap-0 flex-1 min-w-0 border-t border-[#1E1E2E] sm:border-t-0 sm:border-l sm:border-[#1E1E2E]">
+        {/* Controls column — scrolls independently */}
+        <div className="flex flex-col gap-0 flex-1 min-w-0 border-t border-[#1E1E2E] sm:border-t-0 sm:max-h-[420px] sm:overflow-y-auto">
 
           {/* Style */}
           <div className="px-4 py-3 flex flex-col gap-2">
