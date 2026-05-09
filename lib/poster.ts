@@ -19,6 +19,8 @@ export interface PosterOptions {
   titleColor: string;      // bottom title text colour
   titleFont: string;       // CSS font-family string
   statsColor: string;      // "" = keep per-stat colours; hex = override all
+  dateColor: string;       // date text colour
+  unitColor: string;       // KM / STOPS / DAYS label colour
 }
 
 export const DEFAULT_OPTIONS: PosterOptions = {
@@ -38,6 +40,8 @@ export const DEFAULT_OPTIONS: PosterOptions = {
   titleColor: "#FFFFFF",
   titleFont: "system-ui,sans-serif",
   statsColor: "",
+  dateColor: "",
+  unitColor: "",
 };
 
 interface Pt { x: number; y: number }
@@ -243,7 +247,7 @@ export function drawPoster(
 
   const textMuted = isPrint ? "#64748B" : isDark ? "rgba(255,255,255,0.5)" : "#64748B";
 
-  // Title
+  // Resolve title
   const startCity = stops[0]?.stop.name.split(",")[0] ?? "";
   const endCity = stops[stops.length - 1]?.stop.name.split(",")[0] ?? "";
   const autoTitle =
@@ -252,26 +256,36 @@ export function drawPoster(
       : "My Ride";
   const title = options.customTitle.trim() || autoTitle;
 
-  ctx.font = `600 ${16 * scale}px ${titleFont}`;
-  ctx.fillStyle = titleColor;
-  ctx.fillText(title, PAD, BOTTOM_PANEL + 30 * scale, W - PAD * 2);
-
-  // Date
-  if (stops.length > 0) {
-    let dateStr = options.customDate.trim();
-    if (!dateStr) {
-      const d0 = stops[0].stop.startTime;
-      const d1 = stops[stops.length - 1].stop.endTime;
-      const fmt = (d: Date) =>
-        d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
-      dateStr = d0.toDateString() === d1.toDateString() ? fmt(d0) : `${fmt(d0)} — ${fmt(d1)}`;
-    }
-    ctx.font = `400 ${8.5 * scale}px ${titleFont}`;
-    ctx.fillStyle = textMuted;
-    ctx.fillText(dateStr.toUpperCase(), PAD, BOTTOM_PANEL + 46 * scale);
+  // Resolve date string
+  let dateStr = options.customDate.trim();
+  if (!dateStr && stops.length > 0) {
+    const d0 = stops[0].stop.startTime;
+    const d1 = stops[stops.length - 1].stop.endTime;
+    const fmt = (d: Date) =>
+      d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+    dateStr = d0.toDateString() === d1.toDateString() ? fmt(d0) : `${fmt(d0)} — ${fmt(d1)}`;
   }
 
-  // Stats
+  // Panel layout — title centered at top, date below, stats pinned to bottom
+  const panelTop = BOTTOM_PANEL;
+  const panelH = H - BOTTOM_PANEL;
+
+  // Title — centered
+  ctx.textAlign = "center";
+  ctx.font = `600 ${16 * scale}px ${titleFont}`;
+  ctx.fillStyle = titleColor;
+  ctx.fillText(title, W / 2, panelTop + 26 * scale, W - PAD * 2);
+
+  // Date — centered below title
+  if (dateStr) {
+    ctx.font = `400 ${8.5 * scale}px ${titleFont}`;
+    ctx.fillStyle = options.dateColor || textMuted;
+    ctx.fillText(dateStr.toUpperCase(), W / 2, panelTop + 40 * scale);
+  }
+
+  ctx.textAlign = "left";
+
+  // Stats — pinned to bottom of panel
   const kms = Math.round(recap.totals.distanceMeters / 1000);
   const ms0 = stops[0]?.stop.startTime.getTime() ?? 0;
   const ms1 = stops[stops.length - 1]?.stop.endTime.getTime() ?? 0;
@@ -283,20 +297,24 @@ export function drawPoster(
   ];
 
   const slotW = (W - PAD * 2) / 3;
-  const statY = BOTTOM_PANEL + 62 * scale;
+  // Anchor stats to bottom: unit label sits 16px above bottom, value 14px above that
+  const unitY = panelTop + panelH - 16 * scale;
+  const valY = unitY - 14 * scale;
+  const resolvedUnitColor = options.unitColor || textMuted;
+
   statItems.forEach((s, i) => {
     const sx = PAD + i * slotW;
     const maxW = slotW - 6 * scale;
     const valColor = statsColor || (isPrint ? "#0F172A" : s.color);
     ctx.font = `700 ${20 * scale}px ${titleFont}`;
     ctx.fillStyle = valColor;
-    ctx.fillText(s.val, sx, statY + 20 * scale, maxW);
+    ctx.fillText(s.val, sx, valY, maxW);
     ctx.font = `500 ${9 * scale}px system-ui,sans-serif`;
-    ctx.fillStyle = textMuted;
-    ctx.fillText(s.unit, sx, statY + 32 * scale, maxW);
+    ctx.fillStyle = resolvedUnitColor;
+    ctx.fillText(s.unit, sx, unitY, maxW);
   });
 
   ctx.font = `400 ${7 * scale}px system-ui,sans-serif`;
-  ctx.fillStyle = textMuted;
-  ctx.fillText("travel-recap-one.vercel.app", PAD, H - 12 * scale);
+  ctx.fillStyle = resolvedUnitColor;
+  ctx.fillText("travel-recap-one.vercel.app", PAD, H - 4 * scale);
 }

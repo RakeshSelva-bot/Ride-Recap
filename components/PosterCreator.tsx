@@ -220,7 +220,9 @@ export default function PosterCreator({ recap, paths, onClose }: {
             <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-gray-500">Stats panel</p>
             <Slider label="Background" min={0} max={1} step={0.02} value={options.panelOpacity} display={`${Math.round(options.panelOpacity * 100)}%`} onChange={v => set("panelOpacity", v)} />
             <Row label="Title color"><ColorDot value={options.titleColor} onChange={v => set("titleColor", v)} /></Row>
+            <Row label="Date color"><ColorDot value={options.dateColor || "#888888"} onChange={v => set("dateColor", v)} /></Row>
             <Row label="Numbers"><ColorDot value={options.statsColor || "#22D3EE"} onChange={v => set("statsColor", v)} /></Row>
+            <Row label="Units (KM…)"><ColorDot value={options.unitColor || "#888888"} onChange={v => set("unitColor", v)} /></Row>
             <Row label="Font">
               <div className="flex gap-1">
                 {FONTS.map(f => (
