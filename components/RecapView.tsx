@@ -6,6 +6,7 @@ import type { Recap, PathSegment, MatchedStop } from "@/lib/types";
 import { downloadRecapCsv } from "@/lib/export";
 import { buildShareUrl } from "@/lib/share";
 import { saveRecapToSupabase, buildShortShareUrl } from "@/lib/share-supabase";
+import PosterCreator from "./PosterCreator";
 
 const RecapMap = dynamic(() => import("./RecapMap"), {
   ssr: false,
@@ -86,6 +87,7 @@ export default function RecapView({ recap, paths }: { recap: Recap; paths?: Path
   const [shareError, setShareError] = useState<string | null>(null);
   const [shortLabel, setShortLabel] = useState("Save & get short link");
   const [shortBusy, setShortBusy] = useState(false);
+  const [showPoster, setShowPoster] = useState(false);
 
   const handleShare = async () => {
     setShareError(null);
@@ -191,6 +193,20 @@ export default function RecapView({ recap, paths }: { recap: Recap; paths?: Path
                 />
               </svg>
               CSV
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowPoster((v) => !v)}
+              className={`inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition-all focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/40 ${
+                showPoster
+                  ? "border-[#FF6B00] bg-[#FF6B00]/15 text-[#FF6B00]"
+                  : "border-[#2A2A3D] bg-[#13131C] text-gray-200 hover:border-[#FF6B00] hover:text-[#FF6B00]"
+              }`}
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909M3 19.5h18M3.75 6.75h.008v.008H3.75V6.75Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
+              </svg>
+              Poster
             </button>
           </div>
         </header>
@@ -334,6 +350,13 @@ export default function RecapView({ recap, paths }: { recap: Recap; paths?: Path
             ))}
           </ul>
         </section>
+      )}
+      {showPoster && (
+        <PosterCreator
+          recap={recap}
+          paths={paths}
+          onClose={() => setShowPoster(false)}
+        />
       )}
     </div>
   );
