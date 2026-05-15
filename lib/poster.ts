@@ -117,23 +117,18 @@ function buildNerves(pts: Pt[], scale: number, H: number) {
   return out;
 }
 
-// "screen" blend mode makes the route light interact WITH the photo surface
-// — the road texture shows through, lines look projected INTO the ground, not on top
+// Route drawn on offscreen canvas then screen-blended — light merges with road texture
 function drawOnRoadRoute(
   ctx: CanvasRenderingContext2D,
   canvas: HTMLCanvasElement,
   pts: Pt[], color: string, scale: number, H: number
 ) {
   if (pts.length < 2) return;
-
-  // Draw route onto a separate offscreen canvas, then composite with "screen"
-  // This isolates the glow math from the main canvas blend state
   const off = document.createElement("canvas");
   off.width = canvas.width; off.height = canvas.height;
   const oc = off.getContext("2d")!;
   oc.lineCap = "round"; oc.lineJoin = "round";
 
-  // Nerve branches
   buildNerves(pts, scale, H).forEach(({from, to, n}) => {
     oc.save();
     oc.globalAlpha = n * 0.55;
@@ -144,12 +139,11 @@ function drawOnRoadRoute(
     oc.stroke(); oc.restore();
   });
 
-  // 4-pass layered draw on offscreen
   const passes: [number, number, string, number][] = [
-    [0.18, 22, color,       28],  // wide atmospheric halo
-    [0.42,  8, color,       12],  // soft glow
-    [0.92,  2.5, color,      5],  // core line
-    [0.60,  0.8, "#FFFBE0",  3],  // bright centre stripe
+    [0.18, 22, color,       28],
+    [0.42,  8, color,       12],
+    [0.92,  2.5, color,      5],
+    [0.60,  0.8, "#FFFBE0",  3],
   ];
   for (const [alpha, lw, col, blur] of passes) {
     buildPath(oc, pts);
@@ -161,11 +155,38 @@ function drawOnRoadRoute(
     oc.stroke();
   }
 
-  // Composite onto main canvas with "screen" — route light merges with photo surface
   ctx.save();
   ctx.globalCompositeOperation = "screen";
   ctx.drawImage(off, 0, 0);
   ctx.restore();
+}
+
+// Re-draws the photo with a radial mask so the foreground subject (bike/rider)
+// is restored on top of the route, making the route appear projected under them
+function drawBikeMask(
+  ctx: CanvasRenderingContext2D,
+  photo: HTMLImageElement,
+  bW: number, bH: number, dx: number, dy: number,
+  brightness: number, contrast: number,
+  W: number, H: number
+) {
+  const off = document.createElement("canvas");
+  off.width = W; off.height = H;
+  const oc = off.getContext("2d")!;
+  oc.filter = `brightness(${brightness}) contrast(${contrast})`;
+  oc.drawImage(photo, dx, dy, bW, bH);
+  oc.filter = "none";
+  // Radial gradient mask: fully opaque at lower-centre (bike/rider), fades out upward and sideways
+  const cx = W * 0.50, cy = H * 0.80;
+  const mg = oc.createRadialGradient(cx, cy, W * 0.04, cx, cy, W * 0.55);
+  mg.addColorStop(0,    "rgba(0,0,0,1)");
+  mg.addColorStop(0.40, "rgba(0,0,0,0.95)");
+  mg.addColorStop(0.70, "rgba(0,0,0,0.55)");
+  mg.addColorStop(1,    "rgba(0,0,0,0)");
+  oc.globalCompositeOperation = "destination-in";
+  oc.fillStyle = mg;
+  oc.fillRect(0, 0, W, H);
+  ctx.drawImage(off, 0, 0);
 }
 
 export function drawPoster(
@@ -195,36 +216,44 @@ export function drawPoster(
   ctx.fillStyle = isPrint ? "#FFFFFF" : "#07090F";
   ctx.fillRect(0, 0, W, H);
 
+  // Compute photo draw params (reused for bike mask layer)
+  let photoDx = 0, photoDy = 0, photoBW = W, photoBH = H;
   if (photo) {
     const pa = photo.width / photo.height, ca = W / H;
-    let bW = W, bH = W / pa;
-    if (pa > ca) { bH = H; bW = H * pa; }
-    bW *= zoom; bH *= zoom;
-    ctx.filter = `brightness(${brightness}) contrast(${contrast})`;
-    ctx.drawImage(photo, (W-bW)/2+panX*W, (H-bH)/2+panY*H, bW, bH);
+    photoBW = W; photoBH = W / pa;
+    if (pa > ca) { photoBH = H; photoBW = H * pa; }
+    photoBW *= zoom; photoBH *= zoom;
+    photoDx = (W - photoBW) / 2 + panX * W;
+    photoDy = (H - photoBH) / 2 + panY * H;
+  }
+
+  if (photo) {
+    // Layer 1: road background photo (slightly dimmed so screen-blend route pops)
+    const dimB = isOnRoad ? brightness * 0.80 : brightness;
+    ctx.filter = `brightness(${dimB}) contrast(${contrast})`;
+    ctx.drawImage(photo, photoDx, photoDy, photoBW, photoBH);
     ctx.filter = "none";
     if (isOnRoad) {
-      // Very light top scrim only — keep road surface vivid for screen blend
-      const g = ctx.createLinearGradient(0, 0, 0, H*0.28);
-      g.addColorStop(0, "rgba(0,0,0,0.45)"); g.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H*0.28);
+      const g = ctx.createLinearGradient(0, 0, 0, H * 0.30);
+      g.addColorStop(0, "rgba(0,0,0,0.50)"); g.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H * 0.30);
     } else {
       const oc2 = isPrint ? `rgba(255,255,255,${overlayOpacity})` : isDark
         ? `rgba(4,6,18,${overlayOpacity})` : `rgba(248,248,244,${overlayOpacity})`;
       ctx.fillStyle = oc2; ctx.fillRect(0, 0, W, H);
     }
   } else if (isOnRoad) {
-    // Synthetic road surface when no photo
+    // Synthetic road when no photo
     const topY = H * P_TOP, botY = H * P_BOT;
     const thw = P_THW * W * 2, bhw = P_BHW * W * 1.1;
     ctx.beginPath();
     ctx.moveTo(W/2 - thw, topY); ctx.lineTo(W/2 + thw, topY);
-    ctx.lineTo(W/2 + bhw, botY + H*0.05); ctx.lineTo(W/2 - bhw, botY + H*0.05);
+    ctx.lineTo(W/2 + bhw, botY + H * 0.05); ctx.lineTo(W/2 - bhw, botY + H * 0.05);
     ctx.closePath();
     const rg = ctx.createLinearGradient(0, topY, 0, botY);
     rg.addColorStop(0, "#18181e"); rg.addColorStop(1, "#2a2830");
     ctx.fillStyle = rg; ctx.fill();
-    ctx.strokeStyle = "rgba(255,255,255,0.09)"; ctx.lineWidth = 1.5*scale;
+    ctx.strokeStyle = "rgba(255,255,255,0.09)"; ctx.lineWidth = 1.5 * scale;
     ctx.beginPath(); ctx.moveTo(W/2-thw, topY); ctx.lineTo(W/2-bhw, botY); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(W/2+thw, topY); ctx.lineTo(W/2+bhw, botY); ctx.stroke();
     for (let t = 0.06; t < 0.94; t += 0.13) {
@@ -242,9 +271,9 @@ export function drawPoster(
   const STRIP_H  = isOnRoad ? 110 * scale : 70 * scale;
 
   const mapX = isOnRoad ? 0 : PAD_X;
-  const mapY = isOnRoad ? 0 : HEADER_H + 4*scale;
-  const mapW = isOnRoad ? W : W - PAD_X*2;
-  const mapH = isOnRoad ? H : H - FOOTER_H - 4*scale - mapY;
+  const mapY = isOnRoad ? 0 : HEADER_H + 4 * scale;
+  const mapW = isOnRoad ? W : W - PAD_X * 2;
+  const mapH = isOnRoad ? H : H - FOOTER_H - 4 * scale - mapY;
 
   const allPts: LatLng[] = paths.flatMap(s => s.points);
   const stopPts: LatLng[] = recap.stops.map(s => ({ lat: s.stop.lat, lng: s.stop.lng }));
@@ -252,15 +281,16 @@ export function drawPoster(
 
   const rawRoute = isOnRoad ? projectFill(routePts, mapX, mapY, mapW, mapH) : project(routePts, mapX, mapY, mapW, mapH);
   const rawStops = isOnRoad ? projectFill(stopPts,  mapX, mapY, mapW, mapH) : project(stopPts,  mapX, mapY, mapW, mapH);
-  const mcx = mapX + mapW/2, mcy = mapY + mapH/2;
+  const mcx = mapX + mapW / 2, mcy = mapY + mapH / 2;
   const tx = (pts: Pt[]) => pts.map(p => ({
-    x: mcx + (p.x-mcx)*mapZoom + mapPanX*mapW,
-    y: mcy + (p.y-mcy)*mapZoom + mapPanY*mapH,
+    x: mcx + (p.x - mcx) * mapZoom + mapPanX * mapW,
+    y: mcy + (p.y - mcy) * mapZoom + mapPanY * mapH,
   }));
   const txRoute = tx(rawRoute), txStops = tx(rawStops);
   const projRoute = isOnRoad ? perspWarp(txRoute, mapX, mapY, mapW, mapH, W, H) : txRoute;
   const projStops = isOnRoad ? perspWarp(txStops, mapX, mapY, mapW, mapH, W, H) : txStops;
 
+  // Layer 2: route (screen blend onto road surface)
   if (projRoute.length >= 2) {
     ctx.save();
     if (isOnRoad) {
@@ -274,16 +304,23 @@ export function drawPoster(
     ctx.restore();
   }
 
+  // Layer 3 (on-road + photo only): re-draw photo masked to lower-centre
+  // This places the bike/rider BACK ON TOP of the route — route appears under them
+  if (isOnRoad && photo) {
+    drawBikeMask(ctx, photo, photoBW, photoBH, photoDx, photoDy, brightness, contrast, W, H);
+  }
+
+  // Stop dots + labels
   const usedRects: Rect[] = [];
   const stops = recap.stops;
   ctx.textBaseline = "alphabetic";
 
   projStops.forEach((pt, i) => {
-    const isFirst = i === 0, isLast = i === stops.length-1;
+    const isFirst = i === 0, isLast = i === stops.length - 1;
     const n = isOnRoad ? nearness(pt.y, H) : 1;
     if (isOnRoad && n < 0.08) return;
     const baseR = (isFirst||isLast ? 5.5 : 3.5) * scale;
-    const r = isOnRoad ? baseR*(0.2+0.8*n) : baseR;
+    const r = isOnRoad ? baseR * (0.2 + 0.8 * n) : baseR;
     const cx = isOnRoad ? pt.x : Math.max(mapX+r, Math.min(mapX+mapW-r, pt.x));
     const cy = isOnRoad ? pt.y : Math.max(mapY+r, Math.min(mapY+mapH-r, pt.y));
     const dc = isFirst ? "#22D3EE" : isLast ? "#A3E635" : (isOnRoad ? glowColor : "#FF6B00");
@@ -419,7 +456,7 @@ export function drawPoster(
     const fromTxt = startCity.toUpperCase() || "FROM";
     const toTxt   = endCity.toUpperCase()   || "TO";
     ctx.font = `700 ${14*scale}px ${titleFont}`; ctx.fillStyle = glowColor;
-    ctx.fillText(fromTxt,  PAD_X, bY + 28*scale, divX - PAD_X*2);
+    ctx.fillText(fromTxt, PAD_X, bY + 28*scale, divX - PAD_X*2);
     ctx.font = `400 ${7.5*scale}px system-ui,sans-serif`; ctx.fillStyle = "rgba(255,183,0,0.60)";
     ctx.fillText("TO", PAD_X, bY + 44*scale);
     ctx.font = `700 ${14*scale}px ${titleFont}`; ctx.fillStyle = glowColor;
