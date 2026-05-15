@@ -79,7 +79,7 @@ function strokeGlow(ctx: CanvasRenderingContext2D, color: string, scale: number)
   }
 }
 
-const P_TOP = 0.26, P_BOT = 0.98, P_THW = 0.020, P_BHW = 0.42;
+const P_TOP = 0.26, P_BOT = 0.98, P_THW = 0.025, P_BHW = 0.48;
 
 function perspWarp(pts: Pt[], mapX: number, mapY: number, mapW: number, mapH: number, W: number, H: number): Pt[] {
   const topY = H * P_TOP, botY = H * P_BOT;
@@ -131,19 +131,19 @@ function drawOnRoadRoute(
 
   buildNerves(pts, scale, H).forEach(({from, to, n}) => {
     oc.save();
-    oc.globalAlpha = n * 0.55;
-    oc.lineWidth = (0.5 + 1.2 * n) * scale;
+    oc.globalAlpha = n * 0.70;
+    oc.lineWidth = (1.0 + 3.5 * n) * scale;
     oc.strokeStyle = color;
-    oc.shadowColor = color; oc.shadowBlur = (4 + 8 * n) * scale;
+    oc.shadowColor = color; oc.shadowBlur = (2 + 4 * n) * scale;
     oc.beginPath(); oc.moveTo(from.x, from.y); oc.lineTo(to.x, to.y);
     oc.stroke(); oc.restore();
   });
 
   const passes: [number, number, string, number][] = [
-    [0.18, 22, color,       28],
-    [0.42,  8, color,       12],
-    [0.92,  2.5, color,      5],
-    [0.60,  0.8, "#FFFBE0",  3],
+    [0.12, 20, color,       16],  // wide soft halo (less blur = flatter look)
+    [0.55, 10, color,        7],  // thick glow layer
+    [0.96,  5, color,        3],  // solid bold core
+    [0.70,  2, "#FFFBE0",   2],  // bright centre stripe
   ];
   for (const [alpha, lw, col, blur] of passes) {
     buildPath(oc, pts);
@@ -229,7 +229,7 @@ export function drawPoster(
 
   if (photo) {
     // Layer 1: road background photo (slightly dimmed so screen-blend route pops)
-    const dimB = isOnRoad ? brightness * 0.80 : brightness;
+    const dimB = isOnRoad ? brightness * 0.68 : brightness;
     ctx.filter = `brightness(${dimB}) contrast(${contrast})`;
     ctx.drawImage(photo, photoDx, photoDy, photoBW, photoBH);
     ctx.filter = "none";
