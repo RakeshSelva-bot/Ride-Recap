@@ -99,11 +99,11 @@ function strokeGlow(ctx: CanvasRenderingContext2D, color: string, scale: number)
   ctx.restore();
 }
 
-// Perspective constants — shared between warp + nearness calculations
-const P_TOP  = 0.28;   // vanishing point high up (28% from top)
-const P_BOT  = 0.98;   // extends nearly to bottom
-const P_THW  = 0.03;   // horizon half-width (tight convergence)
-const P_BHW  = 0.20;   // bottom half-width (40% total = centred road corridor)
+// Perspective constants
+const P_TOP = 0.28;   // vanishing point high up (28% from top)
+const P_BOT = 0.98;   // extends nearly to bottom
+const P_THW = 0.025;  // horizon half-width (tight convergence)
+const P_BHW = 0.11;   // bottom half-width (22% total = stays within road width)
 
 // Warp map points to a perspective trapezoid centred on the road
 function perspWarp(
@@ -112,14 +112,11 @@ function perspWarp(
 ): Pt[] {
   const topY = H * P_TOP;
   const botY = H * P_BOT;
-
   return pts.map(pt => {
     const nx = mapW > 0 ? (pt.x - mapX) / mapW : 0.5;
     const ny = mapH > 0 ? (pt.y - mapY) / mapH : 0.5;
-    // ny=0 → far/horizon, ny=1 → near/viewer
-    const t   = Math.pow(Math.max(0, Math.min(1, ny)), 0.62);
-    // Half-width interpolates from tight horizon to centred base
-    const hw  = P_THW + (P_BHW - P_THW) * t;
+    const t  = Math.pow(Math.max(0, Math.min(1, ny)), 0.62);
+    const hw = P_THW + (P_BHW - P_THW) * t;
     const screenX = W / 2 + (nx - 0.5) * hw * W * 2;
     const screenY = topY + t * (botY - topY);
     return { x: screenX, y: screenY };
@@ -131,11 +128,11 @@ function nearness(screenY: number, H: number): number {
   return Math.max(0, Math.min(1, (screenY - H * P_TOP) / (H * (P_BOT - P_TOP))));
 }
 
-// Generate nerve/vein branches off the warped route — the road network effect
+// Generate subtle nerve/vein branches off the warped route
 function buildNerves(pts: Pt[], scale: number, H: number) {
   const result: Array<{ from: Pt; to: Pt; n: number }> = [];
   if (pts.length < 6) return result;
-  const every = Math.max(3, Math.floor(pts.length / 22));
+  const every = Math.max(4, Math.floor(pts.length / 14));
   for (let i = every; i < pts.length - every; i += every) {
     const cur  = pts[i];
     const next = pts[Math.min(i + 3, pts.length - 1)];
@@ -143,15 +140,16 @@ function buildNerves(pts: Pt[], scale: number, H: number) {
     const dx = next.x - prev.x, dy = next.y - prev.y;
     const dlen = Math.sqrt(dx * dx + dy * dy) || 1;
     const n = nearness(cur.y, H);
-    const branchLen = (8 + Math.random() * 32) * scale * (0.1 + 0.9 * n);
+    if (n < 0.2) continue;
+    const branchLen = (4 + Math.random() * 16) * scale * n;
     for (let s = -1; s <= 1; s += 2) {
-      const angle = (0.35 + Math.random() * 0.8) * s;
-      const px = -dy / dlen, py = dx / dlen; // perpendicular to route
+      const angle = (0.4 + Math.random() * 0.6) * s;
+      const px = -dy / dlen, py = dx / dlen;
       const bx = px * Math.cos(angle) - py * Math.sin(angle);
       const by = px * Math.sin(angle) + py * Math.cos(angle);
       result.push({
         from: cur,
-        to: { x: cur.x + bx * branchLen, y: cur.y + by * branchLen * 0.3 }, // flatten Y
+        to: { x: cur.x + bx * branchLen, y: cur.y + by * branchLen * 0.25 },
         n,
       });
     }
@@ -159,7 +157,7 @@ function buildNerves(pts: Pt[], scale: number, H: number) {
   return result;
 }
 
-// Draw perspective route: per-segment opacity+width fade + nerve branches
+// Draw perspective route: per-segment fade + nerve branches
 function drawOnRoadRoute(
   ctx: CanvasRenderingContext2D, pts: Pt[], color: string, scale: number, H: number
 ) {
@@ -199,7 +197,7 @@ function drawOnRoadRoute(
     ctx.lineWidth = w; ctx.strokeStyle = color;
     ctx.stroke();
 
-    // Bright white spine (near only)
+    // White spine near viewer
     if (n > 0.25) {
       ctx.globalAlpha = alpha * 0.55 * n;
       ctx.shadowColor = "#FFFFFF"; ctx.shadowBlur = 3 * scale;
@@ -231,20 +229,20 @@ export function drawPoster(
     customTitle, customDate, avgSpeed, bikeName,
   } = options;
 
-  const isOnRoad   = template === "on-road";
-  const isNight    = template === "night-ride";
-  const isDark     = style === "dark" || isNight || isOnRoad;
-  const isPrint    = style === "print" && !isOnRoad && !isNight;
-  const textMuted  = isPrint ? "#64748B" : isDark ? "rgba(255,255,255,0.5)" : "#64748B";
-  const useGlow    = glowRoute || isOnRoad || isNight;
-  const glowColor  = isOnRoad ? "#FFB800" : isNight ? "#22D3EE" : routeColor;
-  const lineColor  = isOnRoad ? "#FFB800" : isNight ? "#22D3EE" : routeColor;
+  const isOnRoad  = template === "on-road";
+  const isNight   = template === "night-ride";
+  const isDark    = style === "dark" || isNight || isOnRoad;
+  const isPrint   = style === "print" && !isOnRoad && !isNight;
+  const textMuted = isPrint ? "#64748B" : isDark ? "rgba(255,255,255,0.5)" : "#64748B";
+  const useGlow   = glowRoute || isOnRoad || isNight;
+  const glowColor = isOnRoad ? "#FFB800" : isNight ? "#22D3EE" : routeColor;
+  const lineColor = isOnRoad ? "#FFB800" : isNight ? "#22D3EE" : routeColor;
 
-  // ── Background ───────────────────────────────────────────────
+  // ── Background ────────────────────────────────────────────────
   ctx.fillStyle = isPrint ? "#FFFFFF" : "#07090F";
   ctx.fillRect(0, 0, W, H);
 
-  // ── Photo ────────────────────────────────────────────────────
+  // ── Photo ─────────────────────────────────────────────────────
   if (photo) {
     const pa = photo.width / photo.height;
     const ca = W / H;
@@ -256,7 +254,6 @@ export function drawPoster(
     ctx.filter = "none";
 
     if (isOnRoad) {
-      // Light scrim top + bottom only — keep the photo vivid
       ctx.fillStyle = "rgba(0,0,0,0.38)";
       ctx.fillRect(0, 0, W, H * 0.24);
       ctx.fillStyle = "rgba(0,0,0,0.58)";
@@ -269,19 +266,19 @@ export function drawPoster(
     }
   }
 
-  // ── Layout zones ─────────────────────────────────────────────
+  // ── Layout zones ──────────────────────────────────────────────
   const PAD_X    = 20 * scale;
   const HEADER_H = 50 * scale;
   const hasExtra = avgSpeed.trim() || bikeName.trim();
   const FOOTER_H = hasExtra ? 76 * scale : 60 * scale;
-  const STRIP_H  = 70 * scale;   // on-road bottom stats strip
+  const STRIP_H  = 70 * scale;
 
-  const mapX = isOnRoad ? 0      : PAD_X;
-  const mapY = isOnRoad ? 0      : HEADER_H + 4 * scale;
-  const mapW = isOnRoad ? W      : W - PAD_X * 2;
-  const mapH = isOnRoad ? H      : H - FOOTER_H - 4 * scale - mapY;
+  const mapX = isOnRoad ? 0     : PAD_X;
+  const mapY = isOnRoad ? 0     : HEADER_H + 4 * scale;
+  const mapW = isOnRoad ? W     : W - PAD_X * 2;
+  const mapH = isOnRoad ? H     : H - FOOTER_H - 4 * scale - mapY;
 
-  // ── Project route + stops ────────────────────────────────────
+  // ── Project route + stops ─────────────────────────────────────
   const allPts: LatLng[] = paths.flatMap(s => s.points);
   const stopPts: LatLng[] = recap.stops.map(s => ({ lat: s.stop.lat, lng: s.stop.lng }));
   const routePts = simplify(allPts.length >= 2 ? allPts : stopPts, 300);
@@ -302,7 +299,7 @@ export function drawPoster(
   const projRoute = isOnRoad ? perspWarp(txRoute, mapX, mapY, mapW, mapH, W, H) : txRoute;
   const projStops = isOnRoad ? perspWarp(txStops, mapX, mapY, mapW, mapH, W, H) : txStops;
 
-  // ── Route line ───────────────────────────────────────────────
+  // ── Route line ────────────────────────────────────────────────
   if (projRoute.length >= 2) {
     ctx.save();
     if (isOnRoad) {
@@ -320,7 +317,7 @@ export function drawPoster(
     ctx.restore();
   }
 
-  // ── Stop dots + labels ───────────────────────────────────────
+  // ── Stop dots + labels ────────────────────────────────────────
   const usedRects: Rect[] = [];
   const stops = recap.stops;
   ctx.textBaseline = "alphabetic";
@@ -329,13 +326,11 @@ export function drawPoster(
     const isFirst = i === 0;
     const isLast  = i === stops.length - 1;
     const nPt     = isOnRoad ? nearness(pt.y, H) : 1;
-    // In on-road mode dots fade and shrink toward horizon
     const baseR   = (isFirst || isLast ? 5.5 : 3.5) * scale;
     const r       = isOnRoad ? baseR * (0.25 + 0.75 * nPt) : baseR;
     const cx = isOnRoad ? pt.x : Math.max(mapX + r, Math.min(mapX + mapW - r, pt.x));
     const cy = isOnRoad ? pt.y : Math.max(mapY + r, Math.min(mapY + mapH - r, pt.y));
     const dotColor = isFirst ? "#22D3EE" : isLast ? "#A3E635" : (isOnRoad ? glowColor : "#FF6B00");
-    // Skip dots that are nearly invisible (deep horizon)
     if (isOnRoad && nPt < 0.08) return;
 
     // Glow ring
@@ -383,8 +378,7 @@ export function drawPoster(
     const clampX = (v: number) => isOnRoad ? v : Math.max(mapX, Math.min(mapX + mapW - lw, v));
     const clampY = (v: number) => isOnRoad ? v : Math.max(mapY + fsize, Math.min(mapY + mapH - 2 * scale, v));
 
-    // Skip labels that are too far in on-road mode
-    if (isOnRoad && nPt < 0.15) return;
+    if (isOnRoad && nPt < 0.30) return;
 
     const tryPlace = (lx: number, ly: number) => {
       const fx = clampX(lx), fy = clampY(ly);
@@ -411,7 +405,7 @@ export function drawPoster(
     if (!placed && (isFirst || isLast)) tryPlace(cx + r + GAP, cy + fsize * 0.35);
   });
 
-  // ── Panel backgrounds (non on-road) ──────────────────────────
+  // ── Panel backgrounds (non on-road) ───────────────────────────
   if (!isOnRoad && panelOpacity > 0) {
     const bg = isPrint
       ? `rgba(255,255,255,${panelOpacity})`
@@ -464,26 +458,24 @@ export function drawPoster(
   }
   ctx.textAlign = "left";
 
-  // ── Stats ─────────────────────────────────────────────────────
+  // ── Stats ──────────────────────────────────────────────────────
   const kms  = Math.round(recap.totals.distanceMeters / 1000);
   const ms0  = stops[0]?.stop.startTime.getTime() ?? 0;
   const ms1  = stops[stops.length - 1]?.stop.endTime.getTime() ?? 0;
   const days = ms1 > ms0 ? Math.max(1, Math.ceil((ms1 - ms0) / 86400000)) : 1;
 
   const baseStats: { val: string; unit: string; color: string }[] = [
-    { val: String(kms),                       unit: "KM",    color: "#22D3EE" },
-    { val: String(recap.totals.stopCount),    unit: "STOPS", color: "#F472B6" },
-    { val: String(days),                      unit: days === 1 ? "DAY" : "DAYS", color: "#A3E635" },
+    { val: String(kms),                    unit: "KM",    color: "#22D3EE" },
+    { val: String(recap.totals.stopCount), unit: "STOPS", color: "#F472B6" },
+    { val: String(days),                   unit: days === 1 ? "DAY" : "DAYS", color: "#A3E635" },
   ];
   if (avgSpeed.trim()) baseStats.push({ val: avgSpeed.trim(), unit: "AVG KM/H", color: "#FB923C" });
 
   const resolvedUnitColor = unitColor || textMuted;
 
   if (isOnRoad) {
-    // Solid strip at bottom
     ctx.fillStyle = "rgba(0,0,0,0.62)";
     ctx.fillRect(0, H - STRIP_H, W, STRIP_H);
-    // Gold accent line
     ctx.save();
     ctx.shadowColor = glowColor; ctx.shadowBlur = 8 * scale;
     ctx.strokeStyle = glowColor; ctx.lineWidth = 1.2 * scale;
@@ -543,7 +535,7 @@ export function drawPoster(
     }
   }
 
-  // ── Watermark ─────────────────────────────────────────────────
+  // ── Watermark ──────────────────────────────────────────────────
   ctx.font = `400 ${6.5 * scale}px system-ui,sans-serif`;
   ctx.fillStyle = isOnRoad ? "rgba(255,255,255,0.28)" : resolvedUnitColor;
   ctx.textAlign = "right";
