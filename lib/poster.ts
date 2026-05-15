@@ -107,55 +107,40 @@ function buildNerves(pts: Pt[], scale: number, H: number) {
   return out;
 }
 
-// Road-paint style route: thick semi-transparent lines, like tarmac markings
+// Hologram projection style: whole path drawn in layered passes — no per-segment blobs
 function drawOnRoadRoute(ctx: CanvasRenderingContext2D, pts: Pt[], color: string, scale: number, H: number) {
   if (pts.length < 2) return;
   ctx.save();
+  ctx.lineCap = "round"; ctx.lineJoin = "round";
 
-  // Nerve branches first (underneath)
+  // Nerve branches underneath
   buildNerves(pts, scale, H).forEach(({from, to, n}) => {
     ctx.save();
     ctx.globalAlpha = n * 0.50;
-    ctx.lineWidth = (0.8 + 2.5*n) * scale;
-    ctx.strokeStyle = color; ctx.lineCap = "round";
-    ctx.shadowColor = color; ctx.shadowBlur = 3 * scale * n;
+    ctx.lineWidth = (0.4 + 1.0 * n) * scale;
+    ctx.strokeStyle = color;
+    ctx.shadowColor = color; ctx.shadowBlur = (3 + 5 * n) * scale;
     ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
     ctx.stroke(); ctx.restore();
   });
 
-  // Main route: thick road-paint lines, semi-transparent so road shows through
-  for (let i = 0; i < pts.length - 1; i++) {
-    const n     = nearness(pts[i].y, H);
-    // THICK at bottom (road-paint style), thin at horizon
-    const w     = (1.5 + 22 * n) * scale;
-    // Semi-transparent — road texture shows through
-    const alpha = 0.50 + 0.50 * n;
-
-    ctx.save();
-    ctx.lineCap = "round"; ctx.lineJoin = "round";
-    ctx.beginPath(); ctx.moveTo(pts[i].x, pts[i].y); ctx.lineTo(pts[i+1].x, pts[i+1].y);
-
-    // Subtle outer halo (minimal blur — no floating neon effect)
-    ctx.globalAlpha = alpha * 0.30;
-    ctx.shadowColor = color; ctx.shadowBlur = (3 + 7*n) * scale;
-    ctx.lineWidth = w * 1.8; ctx.strokeStyle = color;
+  // 4-pass draw over the full smooth path
+  const passes: [number, number, string, number][] = [
+    [0.14, 18, color,      22],  // wide outer halo
+    [0.38,  7, color,      10],  // soft glow layer
+    [0.88,  2, color,       4],  // core line
+    [0.55, 0.7, "#FFFBE0",  2],  // bright centre stripe
+  ];
+  for (const [alpha, lw, col, blur] of passes) {
+    buildPath(ctx, pts);
+    ctx.globalAlpha = alpha;
+    ctx.lineWidth = lw * scale;
+    ctx.strokeStyle = col;
+    ctx.shadowColor = col;
+    ctx.shadowBlur = blur * scale;
     ctx.stroke();
-
-    // Main paint line
-    ctx.globalAlpha = alpha * 0.88;
-    ctx.shadowBlur = (1 + 3*n) * scale;
-    ctx.lineWidth = w; ctx.strokeStyle = color;
-    ctx.stroke();
-
-    // Bright centre stripe (only near viewer)
-    if (n > 0.30) {
-      ctx.globalAlpha = alpha * 0.60 * n;
-      ctx.shadowBlur = 1.5 * scale;
-      ctx.lineWidth = w * 0.22; ctx.strokeStyle = "#FFFBE0";
-      ctx.stroke();
-    }
-    ctx.restore();
   }
+
   ctx.restore();
 }
 
