@@ -2,12 +2,18 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import type { Recap, PathSegment } from "@/lib/types";
-import { drawPoster, DEFAULT_OPTIONS, type PosterStyle, type PosterOptions } from "@/lib/poster";
+import { drawPoster, DEFAULT_OPTIONS, type PosterStyle, type PosterTemplate, type PosterOptions } from "@/lib/poster";
 
 const STYLES: { id: PosterStyle; label: string }[] = [
   { id: "dark", label: "Dark" },
   { id: "light", label: "Light" },
   { id: "print", label: "Print" },
+];
+
+const TEMPLATES: { id: PosterTemplate; label: string; desc: string }[] = [
+  { id: "on-road",   label: "On Road",   desc: "Route on photo · golden glow" },
+  { id: "dark-card", label: "Dark Card", desc: "Classic split layout" },
+  { id: "night-ride",label: "Night Ride",desc: "Neon glow · dark mood" },
 ];
 
 const FONTS: { value: string; label: string }[] = [
@@ -162,6 +168,26 @@ export default function PosterCreator({ recap, paths, onClose }: {
         {/* Controls column — scrolls independently */}
         <div className="flex flex-col gap-0 flex-1 min-w-0 border-t border-[#1E1E2E] sm:border-t-0 sm:max-h-[420px] sm:overflow-y-auto">
 
+          {/* Template */}
+          <div className="px-4 py-3 flex flex-col gap-2">
+            <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-gray-500">Template</p>
+            <div className="flex flex-col gap-1.5">
+              {TEMPLATES.map(t => (
+                <button key={t.id} onClick={() => set("template", t.id)}
+                  className={`rounded-lg border px-3 py-2 text-left transition-all ${
+                    options.template === t.id
+                      ? "border-[#FF6B00] bg-[#FF6B00]/10"
+                      : "border-[#2A2A3D] hover:border-[#3A3A52]"
+                  }`}>
+                  <p className={`text-xs font-semibold ${options.template === t.id ? "text-[#FF6B00]" : "text-gray-300"}`}>{t.label}</p>
+                  <p className="text-[9px] text-gray-500 mt-0.5">{t.desc}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <Divider />
+
           {/* Style */}
           <div className="px-4 py-3 flex flex-col gap-2">
             <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-gray-500">Style</p>
@@ -215,6 +241,7 @@ export default function PosterCreator({ recap, paths, onClose }: {
               <button onClick={() => setOptions(o => ({ ...o, mapZoom: 1, mapPanX: 0, mapPanY: 0 }))} className="self-start text-[10px] text-gray-500 hover:text-gray-300 transition-colors">Reset map</button>
             )}
             <Row label="Route color"><ColorDot value={options.routeColor} onChange={v => set("routeColor", v)} /></Row>
+            <Row label="Glow effect"><Toggle on={options.glowRoute} onToggle={() => set("glowRoute", !options.glowRoute)} /></Row>
             <Row label="Town names"><ColorDot value={options.labelColor} onChange={v => set("labelColor", v)} /></Row>
             <Row label="Label bg"><Toggle on={options.labelBg} onToggle={() => set("labelBg", !options.labelBg)} /></Row>
           </div>
@@ -253,6 +280,12 @@ export default function PosterCreator({ recap, paths, onClose }: {
               className="w-full rounded border border-[#2A2A3D] bg-[#0A0A12] px-2.5 py-1.5 text-xs text-gray-100 placeholder:text-gray-600 focus:border-[#FF6B00] focus:outline-none" />
             <input type="text" placeholder="Date — auto from ride" value={options.customDate} maxLength={40}
               onChange={e => set("customDate", e.target.value)}
+              className="w-full rounded border border-[#2A2A3D] bg-[#0A0A12] px-2.5 py-1.5 text-xs text-gray-100 placeholder:text-gray-600 focus:border-[#FF6B00] focus:outline-none" />
+            <input type="text" placeholder="Avg speed — e.g. 65" value={options.avgSpeed} maxLength={10}
+              onChange={e => set("avgSpeed", e.target.value)}
+              className="w-full rounded border border-[#2A2A3D] bg-[#0A0A12] px-2.5 py-1.5 text-xs text-gray-100 placeholder:text-gray-600 focus:border-[#FF6B00] focus:outline-none" />
+            <input type="text" placeholder="Bike — e.g. Royal Enfield Guerrilla 450" value={options.bikeName} maxLength={40}
+              onChange={e => set("bikeName", e.target.value)}
               className="w-full rounded border border-[#2A2A3D] bg-[#0A0A12] px-2.5 py-1.5 text-xs text-gray-100 placeholder:text-gray-600 focus:border-[#FF6B00] focus:outline-none" />
           </div>
 
