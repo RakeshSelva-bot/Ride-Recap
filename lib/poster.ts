@@ -100,29 +100,28 @@ function strokeGlow(ctx: CanvasRenderingContext2D, color: string, scale: number)
 }
 
 // Perspective constants — shared between warp + nearness calculations
-const P_TOP  = 0.46;   // vertical ratio of vanishing horizon
-const P_BOT  = 0.97;   // bottom of ground plane
-const P_HW   = 0.055;  // half-width of horizon edge (very tight = dramatic depth)
+const P_TOP  = 0.28;   // vanishing point high up (28% from top)
+const P_BOT  = 0.98;   // extends nearly to bottom
+const P_THW  = 0.03;   // horizon half-width (tight convergence)
+const P_BHW  = 0.20;   // bottom half-width (40% total = centred road corridor)
 
-// Warp map points to a steep perspective trapezoid (route lying flat on ground)
+// Warp map points to a perspective trapezoid centred on the road
 function perspWarp(
   pts: Pt[], mapX: number, mapY: number, mapW: number, mapH: number,
   W: number, H: number
 ): Pt[] {
-  const topY  = H * P_TOP;
-  const botY  = H * P_BOT;
-  const topHW = W * P_HW;
+  const topY = H * P_TOP;
+  const botY = H * P_BOT;
 
   return pts.map(pt => {
     const nx = mapW > 0 ? (pt.x - mapX) / mapW : 0.5;
     const ny = mapH > 0 ? (pt.y - mapY) / mapH : 0.5;
-    // ny=0 → top of map (far horizon), ny=1 → bottom (near viewer)
-    const leftX   = (W / 2 - topHW) * (1 - ny);
-    const rightX  = (W / 2 + topHW) * (1 - ny) + W * ny;
-    const screenX = leftX + nx * (rightX - leftX);
-    // Non-linear Y: aggressive foreshortening toward horizon
-    const tY = Math.pow(Math.max(0, Math.min(1, ny)), 0.58);
-    const screenY = topY + tY * (botY - topY);
+    // ny=0 → far/horizon, ny=1 → near/viewer
+    const t   = Math.pow(Math.max(0, Math.min(1, ny)), 0.62);
+    // Half-width interpolates from tight horizon to centred base
+    const hw  = P_THW + (P_BHW - P_THW) * t;
+    const screenX = W / 2 + (nx - 0.5) * hw * W * 2;
+    const screenY = topY + t * (botY - topY);
     return { x: screenX, y: screenY };
   });
 }
