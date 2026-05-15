@@ -34,7 +34,6 @@ function simplify(pts: LatLng[], max: number): LatLng[] {
   const step = pts.length / max;
   return Array.from({ length: max }, (_, i) => pts[Math.floor(i * step)]);
 }
-// Stretch-fill: no aspect ratio lock — ensures full vertical range for perspWarp
 function projectFill(pts: LatLng[], ox: number, oy: number, w: number, h: number): Pt[] {
   if (!pts.length) return [];
   const lats = pts.map(p => p.lat), lngs = pts.map(p => p.lng);
@@ -80,7 +79,6 @@ function strokeGlow(ctx: CanvasRenderingContext2D, color: string, scale: number)
   }
 }
 
-// Perspective constants — vanishing point at 26%, full road width at base
 const P_TOP = 0.26, P_BOT = 0.98, P_THW = 0.020, P_BHW = 0.42;
 
 function perspWarp(pts: Pt[], mapX: number, mapY: number, mapW: number, mapH: number, W: number, H: number): Pt[] {
@@ -119,37 +117,54 @@ function buildNerves(pts: Pt[], scale: number, H: number) {
   return out;
 }
 
-// Hologram projection: full path in 4 layered passes — no per-segment blobs
-function drawOnRoadRoute(ctx: CanvasRenderingContext2D, pts: Pt[], color: string, scale: number, H: number) {
+// "screen" blend mode makes the route light interact WITH the photo surface
+// — the road texture shows through, lines look projected INTO the ground, not on top
+function drawOnRoadRoute(
+  ctx: CanvasRenderingContext2D,
+  canvas: HTMLCanvasElement,
+  pts: Pt[], color: string, scale: number, H: number
+) {
   if (pts.length < 2) return;
-  ctx.save();
-  ctx.lineCap = "round"; ctx.lineJoin = "round";
 
+  // Draw route onto a separate offscreen canvas, then composite with "screen"
+  // This isolates the glow math from the main canvas blend state
+  const off = document.createElement("canvas");
+  off.width = canvas.width; off.height = canvas.height;
+  const oc = off.getContext("2d")!;
+  oc.lineCap = "round"; oc.lineJoin = "round";
+
+  // Nerve branches
   buildNerves(pts, scale, H).forEach(({from, to, n}) => {
-    ctx.save();
-    ctx.globalAlpha = n * 0.50;
-    ctx.lineWidth = (0.4 + 1.0 * n) * scale;
-    ctx.strokeStyle = color;
-    ctx.shadowColor = color; ctx.shadowBlur = (3 + 5 * n) * scale;
-    ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
-    ctx.stroke(); ctx.restore();
+    oc.save();
+    oc.globalAlpha = n * 0.55;
+    oc.lineWidth = (0.5 + 1.2 * n) * scale;
+    oc.strokeStyle = color;
+    oc.shadowColor = color; oc.shadowBlur = (4 + 8 * n) * scale;
+    oc.beginPath(); oc.moveTo(from.x, from.y); oc.lineTo(to.x, to.y);
+    oc.stroke(); oc.restore();
   });
 
+  // 4-pass layered draw on offscreen
   const passes: [number, number, string, number][] = [
-    [0.14, 18, color,      22],
-    [0.38,  7, color,      10],
-    [0.88,  2, color,       4],
-    [0.55, 0.7, "#FFFBE0",  2],
+    [0.18, 22, color,       28],  // wide atmospheric halo
+    [0.42,  8, color,       12],  // soft glow
+    [0.92,  2.5, color,      5],  // core line
+    [0.60,  0.8, "#FFFBE0",  3],  // bright centre stripe
   ];
   for (const [alpha, lw, col, blur] of passes) {
-    buildPath(ctx, pts);
-    ctx.globalAlpha = alpha;
-    ctx.lineWidth = lw * scale;
-    ctx.strokeStyle = col;
-    ctx.shadowColor = col;
-    ctx.shadowBlur = blur * scale;
-    ctx.stroke();
+    buildPath(oc, pts);
+    oc.globalAlpha = alpha;
+    oc.lineWidth = lw * scale;
+    oc.strokeStyle = col;
+    oc.shadowColor = col;
+    oc.shadowBlur = blur * scale;
+    oc.stroke();
   }
+
+  // Composite onto main canvas with "screen" — route light merges with photo surface
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  ctx.drawImage(off, 0, 0);
   ctx.restore();
 }
 
@@ -189,16 +204,17 @@ export function drawPoster(
     ctx.drawImage(photo, (W-bW)/2+panX*W, (H-bH)/2+panY*H, bW, bH);
     ctx.filter = "none";
     if (isOnRoad) {
+      // Very light top scrim only — keep road surface vivid for screen blend
       const g = ctx.createLinearGradient(0, 0, 0, H*0.28);
-      g.addColorStop(0, "rgba(0,0,0,0.55)"); g.addColorStop(1, "rgba(0,0,0,0)");
+      g.addColorStop(0, "rgba(0,0,0,0.45)"); g.addColorStop(1, "rgba(0,0,0,0)");
       ctx.fillStyle = g; ctx.fillRect(0, 0, W, H*0.28);
     } else {
-      const oc = isPrint ? `rgba(255,255,255,${overlayOpacity})` : isDark
+      const oc2 = isPrint ? `rgba(255,255,255,${overlayOpacity})` : isDark
         ? `rgba(4,6,18,${overlayOpacity})` : `rgba(248,248,244,${overlayOpacity})`;
-      ctx.fillStyle = oc; ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = oc2; ctx.fillRect(0, 0, W, H);
     }
   } else if (isOnRoad) {
-    // Synthetic road surface when no photo uploaded
+    // Synthetic road surface when no photo
     const topY = H * P_TOP, botY = H * P_BOT;
     const thw = P_THW * W * 2, bhw = P_BHW * W * 1.1;
     ctx.beginPath();
@@ -206,7 +222,7 @@ export function drawPoster(
     ctx.lineTo(W/2 + bhw, botY + H*0.05); ctx.lineTo(W/2 - bhw, botY + H*0.05);
     ctx.closePath();
     const rg = ctx.createLinearGradient(0, topY, 0, botY);
-    rg.addColorStop(0, "#12121a"); rg.addColorStop(1, "#222028");
+    rg.addColorStop(0, "#18181e"); rg.addColorStop(1, "#2a2830");
     ctx.fillStyle = rg; ctx.fill();
     ctx.strokeStyle = "rgba(255,255,255,0.09)"; ctx.lineWidth = 1.5*scale;
     ctx.beginPath(); ctx.moveTo(W/2-thw, topY); ctx.lineTo(W/2-bhw, botY); ctx.stroke();
@@ -214,7 +230,7 @@ export function drawPoster(
     for (let t = 0.06; t < 0.94; t += 0.13) {
       const t2 = Math.min(t + 0.07, 0.94);
       const y1 = topY + t*(botY-topY), y2 = topY + t2*(botY-topY);
-      ctx.strokeStyle = `rgba(255,255,200,${0.06 + t*0.09})`; ctx.lineWidth = (0.5+t*1.8)*scale;
+      ctx.strokeStyle = `rgba(255,255,200,${0.05 + t*0.08})`; ctx.lineWidth = (0.5+t*1.8)*scale;
       ctx.beginPath(); ctx.moveTo(W/2, y1); ctx.lineTo(W/2, y2); ctx.stroke();
     }
   }
@@ -234,7 +250,6 @@ export function drawPoster(
   const stopPts: LatLng[] = recap.stops.map(s => ({ lat: s.stop.lat, lng: s.stop.lng }));
   const routePts = simplify(allPts.length >= 2 ? allPts : stopPts, 300);
 
-  // On-road: stretch-fill so perspWarp uses full vertical range
   const rawRoute = isOnRoad ? projectFill(routePts, mapX, mapY, mapW, mapH) : project(routePts, mapX, mapY, mapW, mapH);
   const rawStops = isOnRoad ? projectFill(stopPts,  mapX, mapY, mapW, mapH) : project(stopPts,  mapX, mapY, mapW, mapH);
   const mcx = mapX + mapW/2, mcy = mapY + mapH/2;
@@ -249,7 +264,7 @@ export function drawPoster(
   if (projRoute.length >= 2) {
     ctx.save();
     if (isOnRoad) {
-      drawOnRoadRoute(ctx, projRoute, glowColor, scale, H);
+      drawOnRoadRoute(ctx, canvas, projRoute, glowColor, scale, H);
     } else {
       ctx.beginPath(); ctx.rect(mapX, mapY, mapW, mapH); ctx.clip();
       buildPath(ctx, projRoute);
