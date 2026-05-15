@@ -85,27 +85,23 @@ function strokeGlow(ctx: CanvasRenderingContext2D, color: string, scale: number)
   ctx.save();
   ctx.shadowColor = color; ctx.shadowBlur = 28 * scale;
   ctx.lineWidth = 5 * scale; ctx.strokeStyle = color; ctx.globalAlpha = 0.45;
-  ctx.stroke();
-  ctx.restore();
+  ctx.stroke(); ctx.restore();
   ctx.save();
   ctx.shadowColor = color; ctx.shadowBlur = 14 * scale;
   ctx.lineWidth = 3 * scale; ctx.strokeStyle = color; ctx.globalAlpha = 0.85;
-  ctx.stroke();
-  ctx.restore();
+  ctx.stroke(); ctx.restore();
   ctx.save();
   ctx.shadowColor = "#FFFFFF"; ctx.shadowBlur = 6 * scale;
   ctx.lineWidth = 1.5 * scale; ctx.strokeStyle = "#FFFFFF"; ctx.globalAlpha = 0.6;
-  ctx.stroke();
-  ctx.restore();
+  ctx.stroke(); ctx.restore();
 }
 
-// Perspective constants
-const P_TOP = 0.28;   // vanishing point high up (28% from top)
-const P_BOT = 0.98;   // extends nearly to bottom
-const P_THW = 0.025;  // horizon half-width (tight convergence)
-const P_BHW = 0.11;   // bottom half-width (22% total = stays within road width)
+// ── Perspective constants ────────────────────────────────────────
+const P_TOP = 0.26;   // vanishing point (26% from top)
+const P_BOT = 0.98;   // bottom of ground plane
+const P_THW = 0.022;  // half-width at horizon (tight convergence)
+const P_BHW = 0.28;   // half-width at bottom (56% = fills road area)
 
-// Warp map points to a perspective trapezoid centred on the road
 function perspWarp(
   pts: Pt[], mapX: number, mapY: number, mapW: number, mapH: number,
   W: number, H: number
@@ -115,24 +111,24 @@ function perspWarp(
   return pts.map(pt => {
     const nx = mapW > 0 ? (pt.x - mapX) / mapW : 0.5;
     const ny = mapH > 0 ? (pt.y - mapY) / mapH : 0.5;
-    const t  = Math.pow(Math.max(0, Math.min(1, ny)), 0.62);
+    const t  = Math.pow(Math.max(0, Math.min(1, ny)), 0.60);
     const hw = P_THW + (P_BHW - P_THW) * t;
-    const screenX = W / 2 + (nx - 0.5) * hw * W * 2;
-    const screenY = topY + t * (botY - topY);
-    return { x: screenX, y: screenY };
+    return {
+      x: W / 2 + (nx - 0.5) * hw * W * 2,
+      y: topY + t * (botY - topY),
+    };
   });
 }
 
-// How "near" a screen point is (0 = far/horizon, 1 = near/viewer)
 function nearness(screenY: number, H: number): number {
   return Math.max(0, Math.min(1, (screenY - H * P_TOP) / (H * (P_BOT - P_TOP))));
 }
 
-// Generate subtle nerve/vein branches off the warped route
+// ── Nerve branches ───────────────────────────────────────────────
 function buildNerves(pts: Pt[], scale: number, H: number) {
   const result: Array<{ from: Pt; to: Pt; n: number }> = [];
   if (pts.length < 6) return result;
-  const every = Math.max(4, Math.floor(pts.length / 14));
+  const every = Math.max(4, Math.floor(pts.length / 16));
   for (let i = every; i < pts.length - every; i += every) {
     const cur  = pts[i];
     const next = pts[Math.min(i + 3, pts.length - 1)];
@@ -140,16 +136,16 @@ function buildNerves(pts: Pt[], scale: number, H: number) {
     const dx = next.x - prev.x, dy = next.y - prev.y;
     const dlen = Math.sqrt(dx * dx + dy * dy) || 1;
     const n = nearness(cur.y, H);
-    if (n < 0.2) continue;
-    const branchLen = (4 + Math.random() * 16) * scale * n;
+    if (n < 0.15) continue;
+    const branchLen = (5 + Math.random() * 20) * scale * n;
     for (let s = -1; s <= 1; s += 2) {
-      const angle = (0.4 + Math.random() * 0.6) * s;
+      const angle = (0.3 + Math.random() * 0.7) * s;
       const px = -dy / dlen, py = dx / dlen;
       const bx = px * Math.cos(angle) - py * Math.sin(angle);
       const by = px * Math.sin(angle) + py * Math.cos(angle);
       result.push({
         from: cur,
-        to: { x: cur.x + bx * branchLen, y: cur.y + by * branchLen * 0.25 },
+        to: { x: cur.x + bx * branchLen, y: cur.y + by * branchLen * 0.22 },
         n,
       });
     }
@@ -157,55 +153,99 @@ function buildNerves(pts: Pt[], scale: number, H: number) {
   return result;
 }
 
-// Draw perspective route: per-segment fade + nerve branches
+// ── On-road route: screen-blended projected light effect ─────────
 function drawOnRoadRoute(
   ctx: CanvasRenderingContext2D, pts: Pt[], color: string, scale: number, H: number
 ) {
   if (pts.length < 2) return;
 
-  // 1 — Nerve branches (behind main route)
+  ctx.save();
+  // "screen" blend = adds light to surface — makes route look projected on road
+  ctx.globalCompositeOperation = "screen";
+
+  // Nerve branches
   const nerves = buildNerves(pts, scale, H);
   nerves.forEach(({ from, to, n }) => {
     ctx.save();
-    ctx.globalAlpha = n * 0.55;
-    ctx.shadowColor = color; ctx.shadowBlur = 5 * scale * n;
-    ctx.lineWidth = 0.7 * scale * (0.2 + 0.8 * n);
+    ctx.globalAlpha = n * 0.45;
+    ctx.shadowColor = color; ctx.shadowBlur = 4 * scale * n;
+    ctx.lineWidth = 0.6 * scale * (0.2 + 0.8 * n);
     ctx.strokeStyle = color; ctx.lineCap = "round";
     ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
     ctx.stroke(); ctx.restore();
   });
 
-  // 2 — Main route: segment-by-segment with distance fade
+  // Main route: segment-by-segment fade
   for (let i = 0; i < pts.length - 1; i++) {
     const n     = nearness(pts[i].y, H);
-    const alpha = 0.18 + 0.82 * n;
-    const w     = (0.6 + 2.8 * n) * scale;
+    const alpha = 0.22 + 0.78 * n;
+    const w     = (0.7 + 2.2 * n) * scale;
 
     ctx.save();
     ctx.lineCap = "round"; ctx.lineJoin = "round";
-
-    // Outer glow
-    ctx.globalAlpha = alpha * 0.45;
-    ctx.shadowColor = color; ctx.shadowBlur = (10 + 22 * n) * scale;
-    ctx.lineWidth = w * 2.5; ctx.strokeStyle = color;
     ctx.beginPath(); ctx.moveTo(pts[i].x, pts[i].y); ctx.lineTo(pts[i + 1].x, pts[i + 1].y);
+
+    // Soft glow halo
+    ctx.globalAlpha = alpha * 0.40;
+    ctx.shadowColor = color; ctx.shadowBlur = (5 + 14 * n) * scale;
+    ctx.lineWidth = w * 2.2; ctx.strokeStyle = color;
     ctx.stroke();
 
-    // Core glow
-    ctx.globalAlpha = alpha * 0.9;
-    ctx.shadowColor = color; ctx.shadowBlur = (4 + 8 * n) * scale;
+    // Core line
+    ctx.globalAlpha = alpha * 0.95;
+    ctx.shadowColor = color; ctx.shadowBlur = (2 + 5 * n) * scale;
     ctx.lineWidth = w; ctx.strokeStyle = color;
     ctx.stroke();
 
-    // White spine near viewer
-    if (n > 0.25) {
+    // Bright centre spine (near segments only)
+    if (n > 0.2) {
       ctx.globalAlpha = alpha * 0.55 * n;
-      ctx.shadowColor = "#FFFFFF"; ctx.shadowBlur = 3 * scale;
-      ctx.lineWidth = w * 0.35; ctx.strokeStyle = "#FFFFFF";
+      ctx.shadowBlur = 2 * scale;
+      ctx.lineWidth = w * 0.28; ctx.strokeStyle = "#FFFFFF";
       ctx.stroke();
     }
     ctx.restore();
   }
+
+  ctx.restore(); // restore globalCompositeOperation
+}
+
+// ── Pill label helper (on-road town names) ───────────────────────
+function drawPill(
+  ctx: CanvasRenderingContext2D,
+  text: string, cx: number, cy: number,
+  fsize: number, color: string, scale: number, alpha: number
+) {
+  ctx.save();
+  ctx.globalCompositeOperation = "source-over";
+  ctx.globalAlpha = alpha;
+
+  const pad = 3 * scale;
+  ctx.font = `600 ${fsize}px system-ui,sans-serif`;
+  const tw  = ctx.measureText(text).width;
+  const pw  = tw + pad * 2.5;
+  const ph  = fsize + pad * 1.5;
+  const px  = cx - pw / 2;
+  const py  = cy - ph / 2;
+  const r   = ph / 2;
+
+  // Dark pill background
+  ctx.fillStyle = "rgba(0,0,0,0.72)";
+  ctx.beginPath();
+  ctx.moveTo(px + r, py);
+  ctx.arcTo(px + pw, py, px + pw, py + ph, r);
+  ctx.arcTo(px + pw, py + ph, px, py + ph, r);
+  ctx.arcTo(px, py + ph, px, py, r);
+  ctx.arcTo(px, py, px + pw, py, r);
+  ctx.closePath();
+  ctx.fill();
+
+  // Coloured text
+  ctx.fillStyle = color;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, cx, cy);
+  ctx.restore();
 }
 
 export function drawPoster(
@@ -254,10 +294,11 @@ export function drawPoster(
     ctx.filter = "none";
 
     if (isOnRoad) {
-      ctx.fillStyle = "rgba(0,0,0,0.38)";
-      ctx.fillRect(0, 0, W, H * 0.24);
-      ctx.fillStyle = "rgba(0,0,0,0.58)";
-      ctx.fillRect(0, H * 0.76, W, H * 0.24);
+      // Very light scrim — keep photo vivid so route blends naturally
+      ctx.fillStyle = "rgba(0,0,0,0.18)";
+      ctx.fillRect(0, 0, W, H * 0.22);
+      ctx.fillStyle = "rgba(0,0,0,0.52)";
+      ctx.fillRect(0, H * 0.78, W, H * 0.22);
     } else {
       const oc = isPrint ? `rgba(255,255,255,${overlayOpacity})` : isDark
         ? `rgba(4,6,18,${overlayOpacity})` : `rgba(248,248,244,${overlayOpacity})`;
@@ -271,7 +312,7 @@ export function drawPoster(
   const HEADER_H = 50 * scale;
   const hasExtra = avgSpeed.trim() || bikeName.trim();
   const FOOTER_H = hasExtra ? 76 * scale : 60 * scale;
-  const STRIP_H  = 70 * scale;
+  const STRIP_H  = isOnRoad ? 88 * scale : 70 * scale;
 
   const mapX = isOnRoad ? 0     : PAD_X;
   const mapY = isOnRoad ? 0     : HEADER_H + 4 * scale;
@@ -336,6 +377,7 @@ export function drawPoster(
     // Glow ring
     if (useGlow) {
       ctx.save();
+      ctx.globalCompositeOperation = isOnRoad ? "screen" : "source-over";
       ctx.shadowColor = dotColor; ctx.shadowBlur = 12 * scale;
       ctx.beginPath(); ctx.arc(cx, cy, r + 2 * scale, 0, Math.PI * 2);
       ctx.strokeStyle = dotColor; ctx.lineWidth = 1.5 * scale;
@@ -345,7 +387,8 @@ export function drawPoster(
 
     // Dot fill
     ctx.save();
-    ctx.globalAlpha = isOnRoad ? 0.25 + 0.75 * nPt : 1;
+    ctx.globalCompositeOperation = isOnRoad ? "screen" : "source-over";
+    ctx.globalAlpha = isOnRoad ? 0.3 + 0.7 * nPt : 1;
     ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.fillStyle = dotColor;
     if (useGlow) {
@@ -355,54 +398,73 @@ export function drawPoster(
     ctx.strokeStyle = "rgba(255,255,255,0.85)"; ctx.lineWidth = 1.5 * scale; ctx.stroke();
     ctx.restore();
 
-    // Label
+    // ── Label ─────────────────────────────────────────────────
     const raw  = stops[i].stop.name ?? "";
     const name = raw.split(",")[0].trim().slice(0, 15);
     if (!name || ["unknown", "stop", "unknown place"].includes(name.toLowerCase())) return;
 
-    const fsize = (isFirst || isLast ? 9 : 7.5) * scale;
-    ctx.font = `${isFirst || isLast ? 600 : 400} ${fsize}px system-ui,sans-serif`;
-    const tw = ctx.measureText(name).width;
-    const lpad = labelBg ? 4 * scale : 2 * scale;
-    const lw = tw + lpad * 2;
-    const lh = fsize + lpad * 2;
-    const GAP = 5 * scale;
+    if (isOnRoad) {
+      // On-road: pill label directly above the dot
+      if (nPt < 0.22) return;
+      const fsize = (isFirst || isLast ? 8.5 : 7) * scale;
+      const pillAlpha = Math.min(1, (nPt - 0.22) / 0.3) * (0.7 + 0.3 * nPt);
+      drawPill(ctx, name, cx, cy - r - 9 * scale * nPt, fsize, glowColor, scale, pillAlpha);
 
-    const cands = [
-      { lx: cx + r + GAP,      ly: cy + fsize * 0.35 },
-      { lx: cx - r - GAP - lw, ly: cy + fsize * 0.35 },
-      { lx: cx - lw / 2,       ly: cy - r - GAP },
-      { lx: cx - lw / 2,       ly: cy + r + GAP + fsize },
-    ];
-
-    const clampX = (v: number) => isOnRoad ? v : Math.max(mapX, Math.min(mapX + mapW - lw, v));
-    const clampY = (v: number) => isOnRoad ? v : Math.max(mapY + fsize, Math.min(mapY + mapH - 2 * scale, v));
-
-    if (isOnRoad && nPt < 0.30) return;
-
-    const tryPlace = (lx: number, ly: number) => {
-      const fx = clampX(lx), fy = clampY(ly);
-      const rect: Rect = { x: fx, y: fy - fsize, w: lw, h: lh };
-      if (usedRects.some(r2 => rectsOverlap(rect, r2))) return false;
-      usedRects.push(rect);
-      ctx.save();
-      ctx.globalAlpha = isOnRoad ? 0.2 + 0.8 * nPt : 1;
-      if (labelBg) {
-        ctx.fillStyle = isPrint ? "rgba(255,255,255,0.93)" : "rgba(0,0,0,0.65)";
-        ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
-      } else {
-        ctx.shadowColor = "rgba(0,0,0,0.95)"; ctx.shadowBlur = 4 * scale;
+      // Segment info: show distance to next stop for key stops
+      if ((isFirst || isLast || i % 3 === 0) && i < stops.length - 1 && nPt > 0.35) {
+        const nextStop = stops[i + 1];
+        const ms0 = stops[i].stop.endTime.getTime();
+        const ms1 = nextStop.stop.startTime.getTime();
+        const hrs = (ms1 - ms0) / 3600000;
+        if (hrs > 0.5 && hrs < 48) {
+          const hh = Math.floor(hrs), mm = Math.round((hrs - hh) * 60);
+          const segLabel = `${hh}h ${mm}m`;
+          const segFsize = 6.5 * scale;
+          const midX = (cx + (isOnRoad ? projStops[i + 1]?.x ?? cx : cx)) / 2;
+          const midY = cy - 18 * scale * nPt;
+          drawPill(ctx, segLabel, midX, midY, segFsize, "rgba(255,200,80,0.9)", scale, pillAlpha * 0.7);
+        }
       }
-      ctx.fillStyle = isOnRoad ? glowColor : labelColor;
-      ctx.fillText(name, fx + lpad, fy);
-      ctx.shadowBlur = 0; ctx.shadowColor = "transparent";
-      ctx.restore();
-      return true;
-    };
+    } else {
+      // Standard offset label for dark-card / night-ride
+      const fsize = (isFirst || isLast ? 9 : 7.5) * scale;
+      ctx.font = `${isFirst || isLast ? 600 : 400} ${fsize}px system-ui,sans-serif`;
+      const tw  = ctx.measureText(name).width;
+      const lpad = labelBg ? 4 * scale : 2 * scale;
+      const lw  = tw + lpad * 2;
+      const lh  = fsize + lpad * 2;
+      const GAP = 5 * scale;
 
-    let placed = false;
-    for (const { lx, ly } of cands) { if (tryPlace(lx, ly)) { placed = true; break; } }
-    if (!placed && (isFirst || isLast)) tryPlace(cx + r + GAP, cy + fsize * 0.35);
+      const cands = [
+        { lx: cx + r + GAP,      ly: cy + fsize * 0.35 },
+        { lx: cx - r - GAP - lw, ly: cy + fsize * 0.35 },
+        { lx: cx - lw / 2,       ly: cy - r - GAP },
+        { lx: cx - lw / 2,       ly: cy + r + GAP + fsize },
+      ];
+      const clampX = (v: number) => Math.max(mapX, Math.min(mapX + mapW - lw, v));
+      const clampY = (v: number) => Math.max(mapY + fsize, Math.min(mapY + mapH - 2 * scale, v));
+
+      const tryPlace = (lx: number, ly: number) => {
+        const fx = clampX(lx), fy = clampY(ly);
+        const rect: Rect = { x: fx, y: fy - fsize, w: lw, h: lh };
+        if (usedRects.some(r2 => rectsOverlap(rect, r2))) return false;
+        usedRects.push(rect);
+        if (labelBg) {
+          ctx.fillStyle = isPrint ? "rgba(255,255,255,0.93)" : "rgba(0,0,0,0.65)";
+          ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+        } else {
+          ctx.shadowColor = "rgba(0,0,0,0.95)"; ctx.shadowBlur = 4 * scale;
+        }
+        ctx.fillStyle = labelColor;
+        ctx.fillText(name, fx + lpad, fy);
+        ctx.shadowBlur = 0; ctx.shadowColor = "transparent";
+        return true;
+      };
+
+      let placed = false;
+      for (const { lx, ly } of cands) { if (tryPlace(lx, ly)) { placed = true; break; } }
+      if (!placed && (isFirst || isLast)) tryPlace(cx + r + GAP, cy + fsize * 0.35);
+    }
   });
 
   // ── Panel backgrounds (non on-road) ───────────────────────────
@@ -421,8 +483,8 @@ export function drawPoster(
   }
 
   // ── Title + date ──────────────────────────────────────────────
-  const startCity = stops[0]?.stop.name.split(",")[0] ?? "";
-  const endCity   = stops[stops.length - 1]?.stop.name.split(",")[0] ?? "";
+  const startCity = stops[0]?.stop.name.split(",")[0].trim() ?? "";
+  const endCity   = stops[stops.length - 1]?.stop.name.split(",")[0].trim() ?? "";
   const autoTitle = startCity && endCity && startCity !== endCity ? `${startCity} — ${endCity}` : "My Ride";
   const title     = customTitle.trim() || autoTitle;
   let dateStr     = customDate.trim();
@@ -464,62 +526,82 @@ export function drawPoster(
   const ms1  = stops[stops.length - 1]?.stop.endTime.getTime() ?? 0;
   const days = ms1 > ms0 ? Math.max(1, Math.ceil((ms1 - ms0) / 86400000)) : 1;
 
-  const baseStats: { val: string; unit: string; color: string }[] = [
-    { val: String(kms),                    unit: "KM",    color: "#22D3EE" },
-    { val: String(recap.totals.stopCount), unit: "STOPS", color: "#F472B6" },
-    { val: String(days),                   unit: days === 1 ? "DAY" : "DAYS", color: "#A3E635" },
+  const baseStats: { val: string; unit: string }[] = [
+    { val: String(kms),                    unit: "KM"   },
+    { val: String(recap.totals.stopCount), unit: "STOPS" },
+    { val: String(days),                   unit: days === 1 ? "DAY" : "DAYS" },
   ];
-  if (avgSpeed.trim()) baseStats.push({ val: avgSpeed.trim(), unit: "AVG KM/H", color: "#FB923C" });
+  if (avgSpeed.trim()) baseStats.push({ val: avgSpeed.trim(), unit: "AVG KM/H" });
 
   const resolvedUnitColor = unitColor || textMuted;
 
   if (isOnRoad) {
-    ctx.fillStyle = "rgba(0,0,0,0.62)";
-    ctx.fillRect(0, H - STRIP_H, W, STRIP_H);
+    // ── On-road stats box: reference-style projection ──────────
+    const boxH = STRIP_H;
+    const boxY = H - boxH;
+    // Dark semi-transparent box
+    ctx.fillStyle = "rgba(0,0,0,0.70)";
+    ctx.fillRect(0, boxY, W, boxH);
+
+    // Gold top-border line
     ctx.save();
     ctx.shadowColor = glowColor; ctx.shadowBlur = 8 * scale;
-    ctx.strokeStyle = glowColor; ctx.lineWidth = 1.2 * scale;
-    ctx.beginPath(); ctx.moveTo(PAD_X, H - STRIP_H + 1 * scale); ctx.lineTo(W - PAD_X, H - STRIP_H + 1 * scale);
+    ctx.strokeStyle = glowColor; ctx.lineWidth = 1.5 * scale;
+    ctx.beginPath(); ctx.moveTo(0, boxY + 0.5 * scale); ctx.lineTo(W, boxY + 0.5 * scale);
     ctx.stroke(); ctx.restore();
 
-    const slotW = (W - PAD_X * 2) / baseStats.length;
-    const valY  = H - STRIP_H + 26 * scale;
-    const unitY = H - STRIP_H + 40 * scale;
+    // FROM to TO title
+    const titleLine = startCity && endCity && startCity !== endCity
+      ? startCity.toUpperCase() + "  →  " + endCity.toUpperCase()
+      : title.toUpperCase();
+    ctx.save();
+    ctx.shadowColor = glowColor; ctx.shadowBlur = 10 * scale;
+    ctx.font = `700 ${13 * scale}px ${titleFont}`;
+    ctx.fillStyle = glowColor;
+    ctx.textAlign = "left";
+    ctx.fillText(titleLine, PAD_X, boxY + 22 * scale, W - PAD_X * 2);
+    if (bikeName.trim()) {
+      ctx.font = `400 ${7 * scale}px system-ui,sans-serif`;
+      ctx.fillStyle = "rgba(255,200,80,0.65)";
+      ctx.fillText("BIKE  •  " + bikeName.trim().toUpperCase(), PAD_X, boxY + 34 * scale);
+    }
+    ctx.restore();
+
+    // Stats row
+    const statCount = baseStats.length;
+    const slotW = (W - PAD_X * 2) / statCount;
+    const valY  = boxY + 58 * scale;
+    const unitY = boxY + 71 * scale;
 
     baseStats.forEach((s, i) => {
       const sx = PAD_X + i * slotW;
       ctx.save();
-      ctx.shadowColor = glowColor; ctx.shadowBlur = 10 * scale;
-      ctx.font = `700 ${19 * scale}px ${titleFont}`;
+      ctx.shadowColor = glowColor; ctx.shadowBlur = 6 * scale;
+      ctx.font = `700 ${17 * scale}px ${titleFont}`;
       ctx.fillStyle = glowColor;
+      ctx.textAlign = "left";
       ctx.fillText(s.val, sx, valY, slotW - 4 * scale);
       ctx.restore();
-      ctx.font = `500 ${7.5 * scale}px system-ui,sans-serif`;
-      ctx.fillStyle = "rgba(255,255,255,0.55)";
+      ctx.font = `500 ${6.5 * scale}px system-ui,sans-serif`;
+      ctx.fillStyle = "rgba(255,255,255,0.50)";
+      ctx.textAlign = "left";
       ctx.fillText(s.unit, sx, unitY, slotW - 4 * scale);
     });
-
-    if (bikeName.trim()) {
-      ctx.font = `500 ${8 * scale}px system-ui,sans-serif`;
-      ctx.fillStyle = "rgba(255,255,255,0.55)";
-      ctx.textAlign = "center";
-      ctx.fillText(`BIKE  •  ${bikeName.trim().toUpperCase()}`, W / 2, H - STRIP_H + 56 * scale);
-      ctx.textAlign = "left";
-    }
   } else {
     const footerTop = H - FOOTER_H;
     const valY  = footerTop + 28 * scale;
     const unitY = footerTop + 42 * scale;
     const slotW = (W - PAD_X * 2) / baseStats.length;
+    const statColors = ["#22D3EE", "#F472B6", "#A3E635", "#FB923C"];
 
     baseStats.forEach((s, i) => {
       const sx     = PAD_X + i * slotW;
       const maxW   = slotW - 4 * scale;
-      const vColor = statsColor || (isPrint ? "#0F172A" : s.color);
+      const vColor = statsColor || (isPrint ? "#0F172A" : statColors[i] ?? "#FFFFFF");
       ctx.font = `700 ${20 * scale}px ${titleFont}`;
       if (isNight) {
-        ctx.save(); ctx.shadowColor = s.color; ctx.shadowBlur = 12 * scale;
-        ctx.fillStyle = s.color; ctx.fillText(s.val, sx, valY, maxW); ctx.restore();
+        ctx.save(); ctx.shadowColor = statColors[i] ?? "#FFFFFF"; ctx.shadowBlur = 12 * scale;
+        ctx.fillStyle = statColors[i] ?? "#FFFFFF"; ctx.fillText(s.val, sx, valY, maxW); ctx.restore();
       } else {
         ctx.fillStyle = vColor; ctx.fillText(s.val, sx, valY, maxW);
       }
@@ -531,13 +613,13 @@ export function drawPoster(
     if (bikeName.trim()) {
       ctx.font = `400 ${7.5 * scale}px system-ui,sans-serif`;
       ctx.fillStyle = resolvedUnitColor;
-      ctx.fillText(`BIKE  •  ${bikeName.trim().toUpperCase()}`, PAD_X, footerTop + 58 * scale, W - PAD_X * 2);
+      ctx.fillText("BIKE  •  " + bikeName.trim().toUpperCase(), PAD_X, footerTop + 58 * scale, W - PAD_X * 2);
     }
   }
 
-  // ── Watermark ──────────────────────────────────────────────────
+  // Watermark
   ctx.font = `400 ${6.5 * scale}px system-ui,sans-serif`;
-  ctx.fillStyle = isOnRoad ? "rgba(255,255,255,0.28)" : resolvedUnitColor;
+  ctx.fillStyle = isOnRoad ? "rgba(255,255,255,0.25)" : resolvedUnitColor;
   ctx.textAlign = "right";
   ctx.fillText("travel-recap-one.vercel.app", W - PAD_X, H - 6 * scale);
   ctx.textAlign = "left";
