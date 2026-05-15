@@ -99,26 +99,116 @@ function strokeGlow(ctx: CanvasRenderingContext2D, color: string, scale: number)
   ctx.restore();
 }
 
-// Warp map points to a perspective trapezoid (route lying flat on ground)
+// Perspective constants — shared between warp + nearness calculations
+const P_TOP  = 0.46;   // vertical ratio of vanishing horizon
+const P_BOT  = 0.97;   // bottom of ground plane
+const P_HW   = 0.055;  // half-width of horizon edge (very tight = dramatic depth)
+
+// Warp map points to a steep perspective trapezoid (route lying flat on ground)
 function perspWarp(
   pts: Pt[], mapX: number, mapY: number, mapW: number, mapH: number,
   W: number, H: number
 ): Pt[] {
-  const TOP_Y  = H * 0.36;   // far edge of ground plane
-  const BOT_Y  = H * 0.97;   // near edge
-  const TOP_HW = W * 0.19;   // half-width of the far (top) edge
+  const topY  = H * P_TOP;
+  const botY  = H * P_BOT;
+  const topHW = W * P_HW;
 
   return pts.map(pt => {
     const nx = mapW > 0 ? (pt.x - mapX) / mapW : 0.5;
     const ny = mapH > 0 ? (pt.y - mapY) / mapH : 0.5;
-    // ny=0 top of map (far), ny=1 bottom (near)
-    const leftX  = (W / 2 - TOP_HW) * (1 - ny);
-    const rightX = (W / 2 + TOP_HW) * (1 - ny) + W * ny;
+    // ny=0 → top of map (far horizon), ny=1 → bottom (near viewer)
+    const leftX   = (W / 2 - topHW) * (1 - ny);
+    const rightX  = (W / 2 + topHW) * (1 - ny) + W * ny;
     const screenX = leftX + nx * (rightX - leftX);
-    const tY = Math.pow(Math.max(0, Math.min(1, ny)), 0.72);
-    const screenY = TOP_Y + tY * (BOT_Y - TOP_Y);
+    // Non-linear Y: aggressive foreshortening toward horizon
+    const tY = Math.pow(Math.max(0, Math.min(1, ny)), 0.58);
+    const screenY = topY + tY * (botY - topY);
     return { x: screenX, y: screenY };
   });
+}
+
+// How "near" a screen point is (0 = far/horizon, 1 = near/viewer)
+function nearness(screenY: number, H: number): number {
+  return Math.max(0, Math.min(1, (screenY - H * P_TOP) / (H * (P_BOT - P_TOP))));
+}
+
+// Generate nerve/vein branches off the warped route — the road network effect
+function buildNerves(pts: Pt[], scale: number, H: number) {
+  const result: Array<{ from: Pt; to: Pt; n: number }> = [];
+  if (pts.length < 6) return result;
+  const every = Math.max(3, Math.floor(pts.length / 22));
+  for (let i = every; i < pts.length - every; i += every) {
+    const cur  = pts[i];
+    const next = pts[Math.min(i + 3, pts.length - 1)];
+    const prev = pts[Math.max(i - 3, 0)];
+    const dx = next.x - prev.x, dy = next.y - prev.y;
+    const dlen = Math.sqrt(dx * dx + dy * dy) || 1;
+    const n = nearness(cur.y, H);
+    const branchLen = (8 + Math.random() * 32) * scale * (0.1 + 0.9 * n);
+    for (let s = -1; s <= 1; s += 2) {
+      const angle = (0.35 + Math.random() * 0.8) * s;
+      const px = -dy / dlen, py = dx / dlen; // perpendicular to route
+      const bx = px * Math.cos(angle) - py * Math.sin(angle);
+      const by = px * Math.sin(angle) + py * Math.cos(angle);
+      result.push({
+        from: cur,
+        to: { x: cur.x + bx * branchLen, y: cur.y + by * branchLen * 0.3 }, // flatten Y
+        n,
+      });
+    }
+  }
+  return result;
+}
+
+// Draw perspective route: per-segment opacity+width fade + nerve branches
+function drawOnRoadRoute(
+  ctx: CanvasRenderingContext2D, pts: Pt[], color: string, scale: number, H: number
+) {
+  if (pts.length < 2) return;
+
+  // 1 — Nerve branches (behind main route)
+  const nerves = buildNerves(pts, scale, H);
+  nerves.forEach(({ from, to, n }) => {
+    ctx.save();
+    ctx.globalAlpha = n * 0.55;
+    ctx.shadowColor = color; ctx.shadowBlur = 5 * scale * n;
+    ctx.lineWidth = 0.7 * scale * (0.2 + 0.8 * n);
+    ctx.strokeStyle = color; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
+    ctx.stroke(); ctx.restore();
+  });
+
+  // 2 — Main route: segment-by-segment with distance fade
+  for (let i = 0; i < pts.length - 1; i++) {
+    const n     = nearness(pts[i].y, H);
+    const alpha = 0.18 + 0.82 * n;
+    const w     = (0.6 + 2.8 * n) * scale;
+
+    ctx.save();
+    ctx.lineCap = "round"; ctx.lineJoin = "round";
+
+    // Outer glow
+    ctx.globalAlpha = alpha * 0.45;
+    ctx.shadowColor = color; ctx.shadowBlur = (10 + 22 * n) * scale;
+    ctx.lineWidth = w * 2.5; ctx.strokeStyle = color;
+    ctx.beginPath(); ctx.moveTo(pts[i].x, pts[i].y); ctx.lineTo(pts[i + 1].x, pts[i + 1].y);
+    ctx.stroke();
+
+    // Core glow
+    ctx.globalAlpha = alpha * 0.9;
+    ctx.shadowColor = color; ctx.shadowBlur = (4 + 8 * n) * scale;
+    ctx.lineWidth = w; ctx.strokeStyle = color;
+    ctx.stroke();
+
+    // Bright white spine (near only)
+    if (n > 0.25) {
+      ctx.globalAlpha = alpha * 0.55 * n;
+      ctx.shadowColor = "#FFFFFF"; ctx.shadowBlur = 3 * scale;
+      ctx.lineWidth = w * 0.35; ctx.strokeStyle = "#FFFFFF";
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
 }
 
 export function drawPoster(
@@ -216,15 +306,17 @@ export function drawPoster(
   // ── Route line ───────────────────────────────────────────────
   if (projRoute.length >= 2) {
     ctx.save();
-    if (!isOnRoad) {
-      ctx.beginPath(); ctx.rect(mapX, mapY, mapW, mapH); ctx.clip();
-    }
-    buildPath(ctx, projRoute);
-    if (useGlow) {
-      strokeGlow(ctx, glowColor, scale);
+    if (isOnRoad) {
+      drawOnRoadRoute(ctx, projRoute, glowColor, scale, H);
     } else {
-      ctx.strokeStyle = lineColor; ctx.lineWidth = 2.5 * scale;
-      ctx.lineJoin = "round"; ctx.lineCap = "round"; ctx.stroke();
+      ctx.beginPath(); ctx.rect(mapX, mapY, mapW, mapH); ctx.clip();
+      buildPath(ctx, projRoute);
+      if (useGlow) {
+        strokeGlow(ctx, glowColor, scale);
+      } else {
+        ctx.strokeStyle = lineColor; ctx.lineWidth = 2.5 * scale;
+        ctx.lineJoin = "round"; ctx.lineCap = "round"; ctx.stroke();
+      }
     }
     ctx.restore();
   }
@@ -237,28 +329,37 @@ export function drawPoster(
   projStops.forEach((pt, i) => {
     const isFirst = i === 0;
     const isLast  = i === stops.length - 1;
-    const r = (isFirst || isLast ? 5.5 : 3.5) * scale;
+    const nPt     = isOnRoad ? nearness(pt.y, H) : 1;
+    // In on-road mode dots fade and shrink toward horizon
+    const baseR   = (isFirst || isLast ? 5.5 : 3.5) * scale;
+    const r       = isOnRoad ? baseR * (0.25 + 0.75 * nPt) : baseR;
     const cx = isOnRoad ? pt.x : Math.max(mapX + r, Math.min(mapX + mapW - r, pt.x));
     const cy = isOnRoad ? pt.y : Math.max(mapY + r, Math.min(mapY + mapH - r, pt.y));
     const dotColor = isFirst ? "#22D3EE" : isLast ? "#A3E635" : (isOnRoad ? glowColor : "#FF6B00");
+    // Skip dots that are nearly invisible (deep horizon)
+    if (isOnRoad && nPt < 0.08) return;
 
     // Glow ring
     if (useGlow) {
       ctx.save();
       ctx.shadowColor = dotColor; ctx.shadowBlur = 12 * scale;
       ctx.beginPath(); ctx.arc(cx, cy, r + 2 * scale, 0, Math.PI * 2);
-      ctx.strokeStyle = dotColor; ctx.lineWidth = 1.5 * scale; ctx.globalAlpha = 0.55;
+      ctx.strokeStyle = dotColor; ctx.lineWidth = 1.5 * scale;
+      ctx.globalAlpha = isOnRoad ? 0.55 * nPt : 0.55;
       ctx.stroke(); ctx.restore();
     }
 
     // Dot fill
+    ctx.save();
+    ctx.globalAlpha = isOnRoad ? 0.25 + 0.75 * nPt : 1;
     ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.fillStyle = dotColor;
     if (useGlow) {
-      ctx.save(); ctx.shadowColor = dotColor; ctx.shadowBlur = 10 * scale;
-      ctx.fill(); ctx.restore();
+      ctx.shadowColor = dotColor; ctx.shadowBlur = 10 * scale;
+      ctx.fill();
     } else { ctx.fill(); }
     ctx.strokeStyle = "rgba(255,255,255,0.85)"; ctx.lineWidth = 1.5 * scale; ctx.stroke();
+    ctx.restore();
 
     // Label
     const raw  = stops[i].stop.name ?? "";
@@ -283,11 +384,16 @@ export function drawPoster(
     const clampX = (v: number) => isOnRoad ? v : Math.max(mapX, Math.min(mapX + mapW - lw, v));
     const clampY = (v: number) => isOnRoad ? v : Math.max(mapY + fsize, Math.min(mapY + mapH - 2 * scale, v));
 
+    // Skip labels that are too far in on-road mode
+    if (isOnRoad && nPt < 0.15) return;
+
     const tryPlace = (lx: number, ly: number) => {
       const fx = clampX(lx), fy = clampY(ly);
       const rect: Rect = { x: fx, y: fy - fsize, w: lw, h: lh };
       if (usedRects.some(r2 => rectsOverlap(rect, r2))) return false;
       usedRects.push(rect);
+      ctx.save();
+      ctx.globalAlpha = isOnRoad ? 0.2 + 0.8 * nPt : 1;
       if (labelBg) {
         ctx.fillStyle = isPrint ? "rgba(255,255,255,0.93)" : "rgba(0,0,0,0.65)";
         ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
@@ -297,6 +403,7 @@ export function drawPoster(
       ctx.fillStyle = isOnRoad ? glowColor : labelColor;
       ctx.fillText(name, fx + lpad, fy);
       ctx.shadowBlur = 0; ctx.shadowColor = "transparent";
+      ctx.restore();
       return true;
     };
 
